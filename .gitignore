@@ -1,0 +1,9 @@
+# Binaries
+*.o
+*.out
+*/test_protocol
+
+# Editor/OS-specific
+.DS_Store
+thumbs.db
+.vscode/
