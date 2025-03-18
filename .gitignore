@@ -2,6 +2,7 @@
 *.o
 *.out
 */test_protocol
+*/test_server
 
 # Editor/OS-specific
 .DS_Store
