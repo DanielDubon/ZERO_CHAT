@@ -2,8 +2,11 @@
 #define CLIENT_H
 
 #include "WebSocket.h"
+#include "Message.h"
 #include <string>
 #include <iostream>
+#include <vector>
+#include <mutex>
 
 class Client {
 public:
@@ -18,6 +21,24 @@ public:
     bool isConnected() const;  // Verificar si está conectado
     void run();  // Añadir esta declaración
 
+    // Nuevo método para obtener mensajes
+    std::vector<Message> getMessages();
+    
+    // Nuevo método para añadir un mensaje
+    void addMessage(const Message& message);
+    
+    // Getter para el nombre de usuario
+    std::string getUsername() const { return username_; }
+    
+    // Getter para el estado
+    std::string getStatus() const { return status_; }
+
+    // Método para obtener la lista de usuarios conectados
+    std::vector<std::pair<std::string, std::string>> getConnectedUsers() {
+        std::lock_guard<std::mutex> lock(usersMutex_);
+        return connectedUsers_;
+    }
+
 private:
     void handleIncomingMessage(const std::string& rawMsg);
     void displayPrompt() const;
@@ -27,6 +48,12 @@ private:
     std::string status_;  // Estado del usuario
     std::string host_;    // Añadir estos
     int port_;           // miembros
+    
+    std::vector<Message> messages_;  // Almacén de mensajes
+    std::mutex messagesMutex_;       // Mutex para proteger el acceso a los mensajes
+    
+    std::vector<std::pair<std::string, std::string>> connectedUsers_;  // Lista de usuarios conectados (nombre, estado)
+    std::mutex usersMutex_;  // Mutex para proteger el acceso a la lista de usuarios
 };
 
 #endif // CLIENT_H

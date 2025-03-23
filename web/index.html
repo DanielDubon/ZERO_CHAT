@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeroChat - Cliente de Chat</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="chat-container">
+        <header class="chat-header">
+            <h1>ZeroChat</h1>
+            <div class="user-status">
+                <span id="username">Usuario</span>
+                <select id="status-selector">
+                    <option value="ACTIVO">Activo</option>
+                    <option value="OCUPADO">Ocupado</option>
+                    <option value="INACTIVO">Inactivo</option>
+                </select>
+            </div>
+        </header>
+        
+        <main class="chat-main">
+            <div class="chat-sidebar">
+                <h3>Usuarios en línea</h3>
+                <ul id="users-list"></ul>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages"></div>
+        </main>
+        
+        <div class="chat-form-container">
+            <form id="chat-form">
+                <input
+                    id="msg"
+                    type="text"
+                    placeholder="Escribe un mensaje..."
+                    required
+                    autocomplete="off"
+                />
+                <select id="recipient-selector">
+                    <option value="all">Todos</option>
+                </select>
+                <button type="button" id="send-button" class="btn">Enviar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html> 

@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/zerochat_server.dir/server/src/main.cpp.o CMakeFiles/zerochat_server.dir/server/src/Server.cpp.o CMakeFiles/zerochat_server.dir/server/src/User.cpp.o CMakeFiles/zerochat_server.dir/server/src/Message.cpp.o CMakeFiles/zerochat_server.dir/common/src/Protocol.cpp.o -o zerochat_server  /usr/lib/x86_64-linux-gnu/libwebsockets.so -lpthread 

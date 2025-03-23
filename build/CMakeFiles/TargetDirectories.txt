@@ -1,0 +1,4 @@
+/home/bianca_cal/ZERO_CHAT/build/CMakeFiles/zerochat_client.dir
+/home/bianca_cal/ZERO_CHAT/build/CMakeFiles/zerochat_server.dir
+/home/bianca_cal/ZERO_CHAT/build/CMakeFiles/edit_cache.dir
+/home/bianca_cal/ZERO_CHAT/build/CMakeFiles/rebuild_cache.dir

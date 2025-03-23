@@ -4,6 +4,8 @@
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <vector>
+#include <mutex>
 
 // Constructor por defecto
 Client::Client() : ws_(), username_(""), status_("ACTIVO") {}
@@ -112,29 +114,61 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                 std::string sender = Protocol::bytesToString(fields[0]);
                 std::string content = Protocol::bytesToString(fields[1]);
                 std::cout << "\n[" << sender << "]: " << content << std::endl;
+                
+                // Añadir el mensaje al almacén
+                Message msg(sender, "all", content);
+                addMessage(msg);
+                
                 displayPrompt();  // Volver a mostrar el prompt después del mensaje
             }
             break;
 
         case 51: // SERVER_LIST
-            std::cout << "\nUsuarios conectados:\n";
-            for (const auto& field : fields) {
-                std::string username = Protocol::bytesToString(field);
-                std::cout << "- " << username;
-                if (username == username_) {
-                    std::cout << " (tú)";
+            {
+                std::cout << "\nUsuarios conectados:\n";
+                
+                // Actualizar la lista de usuarios conectados
+                std::lock_guard<std::mutex> lock(usersMutex_);
+                connectedUsers_.clear();
+                
+                for (const auto& field : fields) {
+                    std::string username = Protocol::bytesToString(field);
+                    std::cout << "- " << username;
+                    if (username == username_) {
+                        std::cout << " (tú)";
+                        // Añadir el usuario actual con su estado
+                        connectedUsers_.push_back({username, status_});
+                    } else {
+                        // Añadir otros usuarios con estado desconocido
+                        connectedUsers_.push_back({username, "ACTIVO"});
+                    }
+                    std::cout << std::endl;
                 }
-                std::cout << std::endl;
+                displayPrompt();
             }
-            displayPrompt();
             break;
 
         case 5: // SERVER_LIST_RESPONSE
-            std::cout << "\nUsuarios conectados:\n";
-            for (const auto& field : fields) {
-                std::cout << "- " << Protocol::bytesToString(field) << std::endl;
+            {
+                std::cout << "\nUsuarios conectados:\n";
+                
+                // Actualizar la lista de usuarios conectados
+                std::lock_guard<std::mutex> lock(usersMutex_);
+                connectedUsers_.clear();
+                
+                for (const auto& field : fields) {
+                    std::string username = Protocol::bytesToString(field);
+                    std::cout << "- " << username << std::endl;
+                    
+                    // Añadir a la lista de usuarios conectados
+                    if (username == username_) {
+                        connectedUsers_.push_back({username, status_});
+                    } else {
+                        connectedUsers_.push_back({username, "ACTIVO"});
+                    }
+                }
+                displayPrompt();
             }
-            displayPrompt();
             break;
 
         case 6: // SERVER_ERROR
@@ -150,6 +184,11 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                 std::string sender = Protocol::bytesToString(fields[0]);
                 std::string content = Protocol::bytesToString(fields[1]);
                 std::cout << "\n[Mensaje Privado de " << sender << "]: " << content << std::endl;
+                
+                // Añadir el mensaje al almacén
+                Message msg(sender, username_, content);
+                addMessage(msg);
+                
                 displayPrompt();
             }
             break;
@@ -164,4 +203,14 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
 // Añadir esta función auxiliar
 void Client::displayPrompt() const {
     std::cout << "> " << std::flush;
+}
+
+std::vector<Message> Client::getMessages() {
+    std::lock_guard<std::mutex> lock(messagesMutex_);
+    return messages_;
+}
+
+void Client::addMessage(const Message& message) {
+    std::lock_guard<std::mutex> lock(messagesMutex_);
+    messages_.push_back(message);
 }

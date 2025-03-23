@@ -2,7 +2,7 @@ CXX = g++
 CXXFLAGS = -Wall -std=c++17 -fPIC -I.. -I../common/src
 LDFLAGS = -lwebsockets -pthread
 
-SRCS = src/main.cpp src/Client.cpp src/ChatUI.cpp src/WebSocket.cpp ../common/src/Protocol.cpp
+SRCS = src/main.cpp src/Client.cpp src/ChatUI.cpp src/WebUI.cpp src/WebSocket.cpp src/Message.cpp ../common/src/Protocol.cpp
 OBJS = $(SRCS:.cpp=.o)
 TARGET = client
 

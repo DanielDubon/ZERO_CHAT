@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZeroChat</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="user-info">
+                <img src="/static/img/avatar.png" alt="Avatar" class="avatar">
+                <div class="user-details">
+                    <h3 id="username">Usuario</h3>
+                    <select id="status" class="status-select">
+                        <option value="ACTIVO">Activo</option>
+                        <option value="OCUPADO">Ocupado</option>
+                        <option value="INACTIVO">Inactivo</option>
+                    </select>
+                </div>
+            </div>
+            <div class="users-list">
+                <h3>Usuarios Conectados</h3>
+                <ul id="users"></ul>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="chat-container">
+                <div id="messages" class="messages"></div>
+                
+                <div class="input-area">
+                    <select id="messageType" class="message-type">
+                        <option value="broadcast">Broadcast</option>
+                        <option value="private">Privado</option>
+                    </select>
+                    <select id="recipient" class="recipient" style="display: none;"></select>
+                    <input type="text" id="messageInput" placeholder="Escribe tu mensaje...">
+                    <button id="sendButton" class="send-button">Enviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/chat.js"></script>
+</body>
+</html>
