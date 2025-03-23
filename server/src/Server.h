@@ -5,9 +5,12 @@
 #include <unordered_map>
 #include <mutex>
 #include <memory>
-#include <thread>
+#include <vector>
 #include "User.h"
-#include "WebSocket.h"
+#include <libwebsockets.h>
+
+// Forward declaration
+struct SessionData;
 
 class Server {
 public:
@@ -21,25 +24,42 @@ public:
     // Detiene el servidor y libera recursos
     void stop();
 
+    static int wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
+                         void *user, void *in, size_t len);
+
 private:
     int port_;
     bool running_;
+    struct lws_context *context_;
 
     // Mapa para almacenar los usuarios registrados (clave: username)
     std::unordered_map<std::string, std::shared_ptr<User>> users_;
     std::mutex usersMutex_; // Para proteger el acceso concurrente al mapa
 
-    // Función que se encarga de aceptar conexiones (ejecutada en un thread separado)
-    void acceptConnections();
+    // Agregar al mapa de usuarios
+    std::unordered_map<std::string, struct lws *> connections_;
 
     // Función para manejar la comunicación con cada cliente (cada conexión se maneja en un thread)
-    void handleClient(std::shared_ptr<WebSocket> clientSocket);
+    void handleClientData(struct lws *wsi, struct SessionData *session, 
+                         const std::vector<uint8_t>& data);
 
     // Registra un usuario; retorna false si el nombre ya existe
     bool registerUser(const std::string& username, std::shared_ptr<User> user);
 
     // Elimina (desregistra) un usuario cuando se desconecta
     void unregisterUser(const std::string& username);
+
+    // Envía la lista de usuarios conectados
+    void sendUserList(struct lws *wsi);
+
+    // Función auxiliar para enviar mensajes a través de WebSocket
+    bool sendMessage(struct lws *wsi, const std::vector<uint8_t>& data);
+};
+
+// Definición de SessionData después de la clase Server
+struct SessionData {
+    Server* server;
+    std::string username;
 };
 
 #endif // SERVER_H

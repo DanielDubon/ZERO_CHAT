@@ -6,41 +6,20 @@
 #include <stdexcept>
 #include <chrono>
 #include <thread>
+#include <libwebsockets.h>
 
-void handleClientData(const std::vector<uint8_t>& data) {
-    uint8_t code;
-    std::vector<std::vector<uint8_t>> fields;
-    if (!Protocol::deserializeMessage(data, code, fields)) {
-        std::cerr << "Error: Mensaje mal formado." << std::endl;
-        return;
-    }
-    
-    // Procesar el mensaje según su código.
-    switch(code) {
-        case 1:
-            // Código 1: Listar usuarios
-            std::cout << "Solicitud de listado de usuarios." << std::endl;
-            // Lógica para enviar la lista de usuarios...
-            break;
-        case 4:
-            // Código 4: Mandar un mensaje
-            if(fields.size() >= 2) {
-                std::string destinatario = Protocol::bytesToString(fields[0]);
-                std::string mensaje = Protocol::bytesToString(fields[1]);
-                std::cout << "Mensaje de " << destinatario << ": " << mensaje << std::endl;
-                // Lógica para reenviar el mensaje...
-            }
-            break;
-        // Otros casos según lo definido en el protocolo.
-        default:
-            std::cerr << "Código desconocido: " << static_cast<int>(code) << std::endl;
-            break;
-    }
-}
-
+static struct lws_protocols protocols[] = {
+    {
+        "chat-protocol",
+        Server::wsCallback,
+        sizeof(SessionData),
+        4096,
+    },
+    { nullptr, nullptr, 0, 0 }
+};
 
 Server::Server(int port)
-    : port_(port), running_(false) {
+    : port_(port), running_(false), context_(nullptr) {
 }
 
 Server::~Server() {
@@ -48,103 +27,138 @@ Server::~Server() {
 }
 
 void Server::start() {
+    struct lws_context_creation_info info;
+    memset(&info, 0, sizeof info);
+
+    info.port = port_;
+    info.protocols = protocols;
+    info.gid = -1;
+    info.uid = -1;
+    info.user = this;
+
+    context_ = lws_create_context(&info);
+    if (!context_) {
+        throw std::runtime_error("Error creando contexto del servidor");
+    }
+
     running_ = true;
-    // Aquí se abriría el socket de escucha en una implementación real.
-    std::cout << "Servidor iniciado en el puerto " << port_ << std::endl;
-    // Lanzamos un thread para aceptar conexiones
-    std::thread acceptThread(&Server::acceptConnections, this);
-    acceptThread.detach();
+    std::cout << "Servidor WebSocket iniciado en puerto " << port_ << std::endl;
+
+    // Bucle principal del servidor
+    while (running_) {
+        lws_service(context_, 50);
+    }
 }
 
 void Server::stop() {
     running_ = false;
-    // Aquí se cerrarían el socket de escucha y otros recursos.
+    if (context_) {
+        lws_context_destroy(context_);
+        context_ = nullptr;
+    }
     std::cout << "Servidor detenido." << std::endl;
 }
 
-void Server::acceptConnections() {
-    // En una implementación real, aquí se aceptan conexiones desde el socket.
-    // En este ejemplo simulamos la aceptación de conexiones cada 5 segundos.
-    while (running_) {
-        // Creamos un nuevo objeto WebSocket para simular una conexión de cliente.
-        std::shared_ptr<WebSocket> clientSocket = std::make_shared<WebSocket>();
-        clientSocket->connect("ws://localhost:" + std::to_string(port_));
+int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
+                      void *user, void *in, size_t len) {
+    SessionData *session = static_cast<SessionData*>(user);
+    Server *server = static_cast<Server*>(lws_context_user(lws_get_context(wsi)));
 
-        // Lanzamos un thread para manejar la comunicación con este cliente.
-        std::thread clientThread(&Server::handleClient, this, clientSocket);
-        clientThread.detach();
-
-        // Esperamos un poco antes de aceptar otra conexión (simulación)
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-    }
-}
-
-void Server::handleClient(std::shared_ptr<WebSocket> clientSocket) {
-    // Se asume que el primer mensaje recibido es el mensaje de registro.
-    // En nuestro protocolo, suponemos que el código 1 indica "registro de usuario"
-    std::string rawMessage = clientSocket->receiveMessage();
-    if (rawMessage.empty()) {
-        std::cerr << "No se recibió mensaje de registro." << std::endl;
-        return;
-    }
-
-    // Convertimos el mensaje (string) a un vector de bytes
-    std::vector<uint8_t> data = Protocol::stringToBytes(rawMessage);
-
-    uint8_t code;
-    std::vector<std::vector<uint8_t>> fields;
-    if (!Protocol::deserializeMessage(data, code, fields)) {
-        std::cerr << "Error: Mensaje mal formado recibido." << std::endl;
-        return;
-    }
-
-    // Validamos que el mensaje sea de registro y que contenga al menos el username
-    if (code != 1 || fields.empty()) {
-        std::cerr << "Error: Mensaje de registro inválido." << std::endl;
-        return;
-    }
-
-    std::string username = Protocol::bytesToString(fields[0]);
-
-    // Para efectos de este ejemplo, usamos una IP simulada.
-    std::string ipAddress = "127.0.0.1";
-
-    // Creamos un objeto User (la clase User ya está implementada en User.h/User.cpp)
-    auto user = std::make_shared<User>(username, ipAddress);
-
-    // Intentamos registrar el usuario; si ya existe, se rechaza la conexión.
-    if (!registerUser(username, user)) {
-        std::cout << "El usuario '" << username << "' ya está registrado." << std::endl;
-        // Aquí se podría enviar un mensaje de error al cliente.
-        return;
-    }
-    std::cout << "Usuario registrado: " << username << std::endl;
-
-    // Bucle principal para manejar la comunicación con el cliente
-    while (running_ && clientSocket->isConnected()) {
-        std::string incoming = clientSocket->receiveMessage();
-        if (incoming.empty()) {
-            // Suponemos que un mensaje vacío indica desconexión
+    switch (reason) {
+        case LWS_CALLBACK_ESTABLISHED: {
+            std::cout << "Nueva conexión WebSocket establecida" << std::endl;
+            session->server = server;
             break;
         }
-        // Convertimos el mensaje entrante a vector de bytes para deserializar
-        std::vector<uint8_t> msgData = Protocol::stringToBytes(incoming);
-        uint8_t msgCode;
-        std::vector<std::vector<uint8_t>> msgFields;
-        if (!Protocol::deserializeMessage(msgData, msgCode, msgFields)) {
-            std::cerr << "Error al deserializar mensaje de " << username << std::endl;
-            continue;
+
+        case LWS_CALLBACK_RECEIVE: {
+            if (!in || len == 0) return 0;
+
+            std::vector<uint8_t> data(static_cast<uint8_t*>(in),
+                                    static_cast<uint8_t*>(in) + len);
+            server->handleClientData(wsi, session, data);
+            break;
         }
-        // Aquí se pueden procesar los diferentes códigos de mensaje (por ejemplo, chat, cambio de status, etc.)
-        std::cout << "Mensaje recibido de " << username << ", código: " << static_cast<int>(msgCode) << std::endl;
-        // Actualizar la última actividad del usuario (si corresponde)
-        user->updateLastActivity();
+
+        case LWS_CALLBACK_CLOSED: {
+            if (session && !session->username.empty()) {
+                server->unregisterUser(session->username);
+                std::cout << "Usuario " << session->username << " desconectado" << std::endl;
+            }
+            break;
+        }
+
+        default:
+            break;
     }
 
-    // Una vez que el cliente se desconecta, se elimina el usuario registrado.
-    unregisterUser(username);
-    std::cout << "Usuario desconectado: " << username << std::endl;
-    clientSocket->disconnect();
+    return 0;
+}
+
+void Server::handleClientData(struct lws *wsi, SessionData *session, 
+                            const std::vector<uint8_t>& data) {
+    uint8_t code;
+    std::vector<std::vector<uint8_t>> fields;
+    
+    if (!Protocol::deserializeMessage(data, code, fields)) {
+        std::cerr << "Error: Mensaje mal formado" << std::endl;
+        return;
+    }
+
+    switch (code) {
+        case 1: { // Registro
+            if (fields.empty()) return;
+            std::string username = Protocol::bytesToString(fields[0]);
+            session->username = username;
+            auto user = std::make_shared<User>(username, "127.0.0.1");
+            if (registerUser(username, user)) {
+                std::cout << "Usuario registrado: " << username << std::endl;
+                connections_[username] = wsi;  // Guardar la conexión
+                sendUserList(wsi);  // Enviar lista de usuarios al nuevo cliente
+            }
+            break;
+        }
+
+        case 2: { // Solicitud de lista de usuarios
+            sendUserList(wsi);
+            break;
+        }
+
+        case 4: { // Mensaje de chat
+            if (fields.size() < 2) return;
+            std::string dest = Protocol::bytesToString(fields[0]);
+            std::string content = Protocol::bytesToString(fields[1]);
+            std::cout << session->username << " -> " << dest << ": " << content << std::endl;
+
+            // Preparar mensaje para reenviar
+            std::vector<std::string> messageFields = {session->username, content};
+            auto response = Protocol::serializeMessage(55, messageFields);  // 55: SERVER_MESSAGE
+
+            if (dest != "all") {
+                auto it = connections_.find(dest);
+                if (it != connections_.end()) {
+                    sendMessage(it->second, response);
+                }
+            } else {
+                // Broadcast a todos los usuarios
+                for (const auto& conn : connections_) {
+                    if (conn.first != session->username) {  // No enviar al remitente
+                        sendMessage(conn.second, response);
+                    }
+                }
+            }
+            break;
+        }
+
+        case 99: { // LOGOUT
+            if (session && !session->username.empty()) {
+                connections_.erase(session->username);
+                unregisterUser(session->username);
+                std::cout << "Usuario " << session->username << " desconectado" << std::endl;
+            }
+            break;
+        }
+    }
 }
 
 bool Server::registerUser(const std::string& username, std::shared_ptr<User> user) {
@@ -160,4 +174,25 @@ bool Server::registerUser(const std::string& username, std::shared_ptr<User> use
 void Server::unregisterUser(const std::string& username) {
     std::lock_guard<std::mutex> lock(usersMutex_);
     users_.erase(username);
+}
+
+bool Server::sendMessage(struct lws *wsi, const std::vector<uint8_t>& data) {
+    // Reservar espacio para LWS_PRE
+    std::vector<uint8_t> buf(LWS_PRE + data.size());
+    memcpy(buf.data() + LWS_PRE, data.data(), data.size());
+
+    int result = lws_write(wsi, buf.data() + LWS_PRE, data.size(), LWS_WRITE_TEXT);
+    return result > 0;
+}
+
+void Server::sendUserList(struct lws *wsi) {
+    std::lock_guard<std::mutex> lock(usersMutex_);
+    std::vector<std::string> userList;
+    for (const auto& user : users_) {
+        userList.push_back(user.first);
+    }
+    
+    // Serializar y enviar la lista
+    auto response = Protocol::serializeMessage(51, userList);  // 51: SERVER_LIST
+    sendMessage(wsi, response);
 }
