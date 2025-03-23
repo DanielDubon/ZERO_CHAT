@@ -2,6 +2,7 @@
 #include "Protocol.h"
 #include <cstring>
 #include <iostream>
+#include <thread>
 
 struct per_session_data {};
 
@@ -23,8 +24,8 @@ WebSocket::~WebSocket() {
     close();
 }
 
-bool WebSocket::connect(const std::string& host, int port, const std::string& username) {
-    std::cout << "Intentando conectar a " << host << ":" << port << " como " << username << std::endl;
+bool WebSocket::connect(const std::string& host, int port, const std::string& path) {
+    std::cout << "Intentando conectar a " << host << ":" << port << std::endl;
 
     struct lws_context_creation_info info;
     memset(&info, 0, sizeof(info));
@@ -33,7 +34,7 @@ bool WebSocket::connect(const std::string& host, int port, const std::string& us
     info.protocols = protocols_;
     info.gid = -1;
     info.uid = -1;
-    info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+    info.options = 0;
     info.user = this;
 
     context_ = lws_create_context(&info);
@@ -48,11 +49,12 @@ bool WebSocket::connect(const std::string& host, int port, const std::string& us
     conn_info.context = context_;
     conn_info.address = host.c_str();
     conn_info.port = port;
-    conn_info.path = "/";  // Cambiamos esto
-    conn_info.host = lws_canonical_hostname(context_);
+    conn_info.path = "/";
+    conn_info.host = host.c_str();
     conn_info.origin = host.c_str();
     conn_info.protocol = protocols_[0].name;
     conn_info.pwsi = &wsi_;
+    conn_info.ssl_connection = 0;
 
     wsi_ = lws_client_connect_via_info(&conn_info);
     if (!wsi_) {
@@ -62,15 +64,29 @@ bool WebSocket::connect(const std::string& host, int port, const std::string& us
         return false;
     }
 
-    std::cout << "Conexión WebSocket iniciada..." << std::endl;
+    // Esperar a que se establezca la conexión
+    int retries = 50;  // Aumentar el número de intentos
+    while (!connected_ && retries-- > 0 && context_) {
+        lws_service(context_, 10);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    if (!connected_) {
+        std::cerr << "Timeout esperando conexión" << std::endl;
+        close();
+        return false;
+    }
+
+    std::cout << "Conexión WebSocket establecida exitosamente" << std::endl;
     return true;
 }
 
 void WebSocket::run() {
-    while (context_ && !lws_service(context_, 50)) {
-        if (!connected_) {
-            std::cout << "Esperando conexión..." << std::endl;
+    while (context_) {
+        if (lws_service(context_, 50) < 0) {
+            break;
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -183,29 +199,36 @@ void WebSocket::processReceivedMessage(const std::string& message) {
 int WebSocket::callback(struct lws *wsi, enum lws_callback_reasons reason,
                        void *user, void *in, size_t len) {
     WebSocket* self = static_cast<WebSocket*>(lws_context_user(lws_get_context(wsi)));
+    if (!self) return 0;
     
     switch (reason) {
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            std::cout << "Conexión WebSocket establecida" << std::endl;
-            self->handleConnect();
+            self->connected_ = true;
+            if (self->connectHandler_) {
+                self->connectHandler_();
+            }
             break;
 
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-            std::cerr << "Error de conexión WebSocket: " << 
-                     (in ? std::string((char*)in, len) : "desconocido") << std::endl;
-            self->handleError("Connection error");
+            self->connected_ = false;
+            if (self->errorHandler_) {
+                std::string error = in ? std::string((char*)in, len) : "unknown error";
+                self->errorHandler_(error);
+            }
             break;
 
         case LWS_CALLBACK_CLIENT_RECEIVE:
             if (in && len && self->messageHandler_) {
                 std::string message(static_cast<char*>(in), len);
-                self->processReceivedMessage(message);
+                self->messageHandler_(message);
             }
             break;
 
         case LWS_CALLBACK_CLIENT_CLOSED:
-            std::cout << "Conexión WebSocket cerrada" << std::endl;
-            self->handleDisconnect();
+            self->connected_ = false;
+            if (self->disconnectHandler_) {
+                self->disconnectHandler_();
+            }
             break;
 
         case LWS_CALLBACK_CLIENT_WRITEABLE:

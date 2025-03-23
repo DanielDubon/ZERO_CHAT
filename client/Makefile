@@ -1,28 +1,20 @@
 CXX = g++
-CXXFLAGS = -Wall -std=c++11 -fPIC
-INCLUDES = -I.. -I../common/src
-LIBS = -lwebsockets -pthread
+CXXFLAGS = -Wall -std=c++17 -fPIC -I.. -I../common/src
+LDFLAGS = -lwebsockets -pthread
 
-COMMON_SRCS = ../common/src/Protocol.cpp
-CLIENT_SRCS = src/WebSocket.cpp
+SRCS = src/main.cpp src/Client.cpp src/ChatUI.cpp src/WebSocket.cpp ../common/src/Protocol.cpp
+OBJS = $(SRCS:.cpp=.o)
+TARGET = client
 
-COMMON_OBJS = $(COMMON_SRCS:.cpp=.o)
-CLIENT_OBJS = $(CLIENT_SRCS:.cpp=.o)
+all: $(TARGET)
 
-TARGETS = test_websocket test_websocket2
-
-.PHONY: all clean
-
-all: $(TARGETS)
-
-test_websocket: $(COMMON_OBJS) $(CLIENT_OBJS) src/test_websocket.o
-	$(CXX) $^ -o $@ $(LIBS)
-
-test_websocket2: $(COMMON_OBJS) $(CLIENT_OBJS) src/test_websocket2.o
-	$(CXX) $^ -o $@ $(LIBS)
+$(TARGET): $(OBJS)
+	$(CXX) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
 %.o: %.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(COMMON_OBJS) $(CLIENT_OBJS) src/test_websocket.o src/test_websocket2.o $(TARGETS)
+	rm -f $(OBJS) $(TARGET)
+
+.PHONY: all clean

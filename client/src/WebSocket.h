@@ -16,7 +16,7 @@ public:
     ~WebSocket();
 
     // Métodos principales
-    bool connect(const std::string& host, int port, const std::string& username);
+    bool connect(const std::string& host, int port, const std::string& path = "/");
     bool send(const std::string& payload);
     bool isConnected() const;
     void close();

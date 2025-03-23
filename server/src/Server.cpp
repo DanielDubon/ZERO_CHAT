@@ -34,6 +34,7 @@ void Server::start() {
     info.protocols = protocols;
     info.gid = -1;
     info.uid = -1;
+    info.options = 0;  // Quitar SSL por ahora
     info.user = this;
 
     context_ = lws_create_context(&info);
@@ -44,9 +45,9 @@ void Server::start() {
     running_ = true;
     std::cout << "Servidor WebSocket iniciado en puerto " << port_ << std::endl;
 
-    // Bucle principal del servidor
     while (running_) {
         lws_service(context_, 50);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
