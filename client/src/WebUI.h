@@ -5,8 +5,8 @@
 #include <string>
 #include <memory>
 #include <functional>
-#include "../../external/cpp-httplib/httplib.h"  // Corregir ruta
-#include "../../external/json/single_include/nlohmann/json.hpp"  // Corregir ruta
+#include "../../external/cpp-httplib/httplib.h"
+#include "../../external/json/single_include/nlohmann/json.hpp"
 
 class WebUI {
 public:
