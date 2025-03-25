@@ -60,9 +60,11 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
     if (recipient == "all") {
         messageType = 4;  // BROADCAST_MESSAGE
         fields = {username_, message};
+        std::cout << "Mensaje enviado a todos: " << message << std::endl;
     } else {
         messageType = 54;  // PRIVATE_MESSAGE
         fields = {username_, recipient, message};
+        std::cout << "Mensaje privado enviado a " << recipient << ": " << message << std::endl;
     }
 
     ws_.send(Protocol::bytesToString(Protocol::serializeMessage(messageType, fields)));

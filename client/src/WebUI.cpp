@@ -196,12 +196,44 @@ body {
     background-color: #4a69bd;
     color: #fff;
     align-self: flex-start;
+    border-left: 4px solid #e74c3c;
+}
+
+.message.private::before {
+    content: "Privado";
+    position: absolute;
+    top: -10px;
+    left: 10px;
+    background-color: #e74c3c;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 5px;
+    border-radius: 3px;
 }
 
 .message.outgoing {
     background-color: #78e08f;
     color: #333;
     align-self: flex-end;
+}
+
+.message.outgoing.private {
+    background-color: #78e08f;
+    color: #333;
+    align-self: flex-end;
+    border-right: 4px solid #e74c3c;
+}
+
+.message.outgoing.private::before {
+    content: "Privado";
+    position: absolute;
+    top: -10px;
+    right: 10px;
+    background-color: #e74c3c;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 5px;
+    border-radius: 3px;
 }
 
 .message .meta {
@@ -289,6 +321,9 @@ body {
 // Mantener un registro de los mensajes ya mostrados
 const messageIds = new Set();
 
+// Añadir esta variable global al inicio del script
+let selectedRecipient = 'all';
+
 function loadMessages() {
     fetch('/api/messages')
         .then(response => response.json())
@@ -337,25 +372,60 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(checkUpdates, 5000);
     
     // Event listeners
-    chatForm.addEventListener('submit', function(e) {
-        e.preventDefault(); // Prevenir el envío del formulario
-        sendMessage();
-    });
-    
-    // Añadir evento al botón también
-    sendButton.addEventListener('click', function() {
-        sendMessage();
-    });
-    
-    // Permitir enviar con Enter
-    msgInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendMessage();
+    chatForm.addEventListener('submit', e => {
+        e.preventDefault();
+        
+        // Obtener mensaje y destinatario
+        const msg = msgInput.value.trim();
+        const recipient = recipientSelector.value;
+        
+        if (msg) {
+            // Enviar mensaje al servidor
+            fetch('/api/message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    recipient: recipient,
+                    content: msg
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    // Crear objeto de mensaje para mostrar inmediatamente
+                    const messageObj = {
+                        sender: username,
+                        content: msg,
+                        timestamp: getCurrentTime(),
+                        type: recipient === 'all' ? 'broadcast' : 'private'
+                    };
+                    
+                    // Mostrar mensaje en la interfaz
+                    outputMessage(messageObj, true);
+                    
+                    // Añadir el ID del mensaje al conjunto para evitar duplicados
+                    const messageId = messageObj.timestamp + '-' + messageObj.sender + '-' + messageObj.content;
+                    messageIds.add(messageId);
+                    
+                    // Limpiar input y hacer scroll
+                    msgInput.value = '';
+                    msgInput.focus();
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+            })
+            .catch(error => console.error('Error enviando mensaje:', error));
         }
     });
     
     statusSelector.addEventListener('change', changeStatus);
+    
+    // Modificar el evento change del selector de destinatarios
+    recipientSelector.addEventListener('change', function(e) {
+        selectedRecipient = e.target.value;
+        console.log('Destinatario seleccionado:', selectedRecipient);
+    });
     
     // Funciones
     function loadUsers() {
@@ -369,6 +439,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Actualizar el selector de destinatarios
                 recipientSelector.innerHTML = '<option value="all">Todos</option>';
+                
+                // Variable para verificar si el destinatario seleccionado sigue disponible
+                let recipientStillExists = selectedRecipient === 'all';
                 
                 // Añadir cada usuario a la lista y al selector
                 data.users.forEach(user => {
@@ -388,53 +461,27 @@ document.addEventListener('DOMContentLoaded', function() {
                         const option = document.createElement('option');
                         option.value = user.username;
                         option.textContent = user.username;
+                        
+                        // Verificar si este es el destinatario seleccionado
+                        if (user.username === selectedRecipient) {
+                            recipientStillExists = true;
+                        }
+                        
                         recipientSelector.appendChild(option);
                     }
                 });
+                
+                // Restaurar la selección o cambiar a 'all' si el destinatario ya no existe
+                if (recipientStillExists) {
+                    recipientSelector.value = selectedRecipient;
+                } else {
+                    recipientSelector.value = 'all';
+                    selectedRecipient = 'all';
+                }
+                
+                console.log('Destinatario restaurado:', recipientSelector.value);
             })
             .catch(error => console.error('Error cargando usuarios:', error));
-    }
-    
-    function sendMessage() {
-        // Obtener mensaje y destinatario
-        const msg = msgInput.value;
-        const recipient = recipientSelector.value;
-        
-        if (!msg) return;
-        
-        console.log("Enviando mensaje:", msg, "a:", recipient);
-        
-        // Enviar mensaje al servidor
-        fetch('/api/message', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                recipient: recipient,
-                content: msg
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log("Respuesta del servidor:", data);
-            if (data.status === 'ok') {
-                // Añadir mensaje a la interfaz
-                const messageObj = {
-                    sender: username,
-                    content: msg,
-                    timestamp: getCurrentTime(),
-                    type: recipient === 'all' ? 'broadcast' : 'private'
-                };
-                outputMessage(messageObj, true);
-                
-                // Limpiar input y hacer scroll
-                msgInput.value = '';
-                msgInput.focus();
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            }
-        })
-        .catch(error => console.error('Error enviando mensaje:', error));
     }
     
     function changeStatus(e) {
@@ -459,33 +506,35 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function checkUpdates() {
-        // Reducir la frecuencia de las solicitudes
-        static let lastCheck = 0;
-        const now = Date.now();
-        
-        // Solo verificar cada 5 segundos
-        if (now - lastCheck < 5000) {
-            return;
-        }
-        
-        lastCheck = now;
-        
         fetch('/api/updates')
             .then(response => response.json())
             .then(data => {
                 if (data.type === 'update') {
-                    // Actualizar usuarios y mensajes si hay cambios
+                    // Guardar la selección actual
+                    const currentSelection = recipientSelector.value;
+                    
+                    // Actualizar usuarios y mensajes
                     loadUsers();
                     loadMessages();
+                    
+                    // Asegurarse de que la selección se mantenga después de un breve retraso
+                    setTimeout(() => {
+                        if (recipientSelector.value !== currentSelection) {
+                            recipientSelector.value = currentSelection;
+                            console.log('Selección restaurada después de actualización:', currentSelection);
+                        }
+                    }, 100);
                 }
             })
             .catch(error => console.error('Error en polling:', error));
     }
     
     function outputMessage(message, outgoing = false) {
+        const chatMessages = document.getElementById('chat-messages');
         const div = document.createElement('div');
         div.classList.add('message');
         div.classList.add(message.type);
+        
         if (outgoing) div.classList.add('outgoing');
         
         div.innerHTML = `
@@ -547,232 +596,15 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
     // Obtener el nombre de usuario real del cliente
     std::string realUsername = client_->getUsername();
     
-    // HTML con JavaScript embebido
+    // Crear el HTML con el nombre de usuario real
     std::string html = R"(<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZeroChat - Cliente de Chat</title>
-    <style>
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-    }
-    
-    body {
-        font-family: 'Roboto', sans-serif;
-        background-color: #f5f5f5;
-        color: #333;
-        line-height: 1.6;
-    }
-    
-    .chat-container {
-        max-width: 1100px;
-        margin: 30px auto;
-        background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        height: 80vh;
-    }
-    
-    .chat-header {
-        background: #4a69bd;
-        color: #fff;
-        padding: 15px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .chat-header h1 {
-        font-size: 1.5rem;
-        font-weight: 500;
-    }
-    
-    .user-status {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    #username {
-        font-weight: 500;
-    }
-    
-    #status-selector {
-        padding: 5px;
-        border-radius: 5px;
-        border: none;
-        background-color: #fff;
-        color: #333;
-    }
-    
-    .chat-main {
-        display: flex;
-        flex: 1;
-    }
-    
-    .chat-sidebar {
-        background: #f8f9fa;
-        color: #333;
-        padding: 20px;
-        width: 250px;
-        border-right: 1px solid #e9ecef;
-        overflow-y: auto;
-    }
-    
-    .chat-sidebar h3 {
-        margin-bottom: 15px;
-        font-size: 1.2rem;
-        color: #4a69bd;
-        font-weight: 500;
-    }
-    
-    .chat-sidebar ul {
-        list-style: none;
-    }
-    
-    .chat-sidebar li {
-        padding: 10px;
-        margin-bottom: 5px;
-        border-radius: 5px;
-        background-color: #fff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .chat-sidebar .status-indicator {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        margin-right: 10px;
-    }
-    
-    .status-ACTIVO {
-        background-color: #2ecc71;
-    }
-    
-    .status-OCUPADO {
-        background-color: #f39c12;
-    }
-    
-    .status-INACTIVO {
-        background-color: #e74c3c;
-    }
-    
-    .chat-messages {
-        flex: 1;
-        padding: 20px;
-        overflow-y: auto;
-        max-height: calc(80vh - 130px);
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .message {
-        padding: 10px 15px;
-        margin-bottom: 15px;
-        border-radius: 10px;
-        position: relative;
-        max-width: 70%;
-    }
-    
-    .message.broadcast {
-        background-color: #e9ecef;
-        color: #333;
-        align-self: flex-start;
-    }
-    
-    .message.private {
-        background-color: #4a69bd;
-        color: #fff;
-        align-self: flex-start;
-    }
-    
-    .message.outgoing {
-        background-color: #78e08f;
-        color: #333;
-        align-self: flex-end;
-    }
-    
-    .message .meta {
-        font-size: 0.8rem;
-        margin-bottom: 5px;
-        display: flex;
-        justify-content: space-between;
-    }
-    
-    .message .meta .sender {
-        font-weight: 500;
-    }
-    
-    .message .meta .time {
-        color: #777;
-    }
-    
-    .chat-form-container {
-        padding: 15px;
-        background-color: #f8f9fa;
-        border-top: 1px solid #e9ecef;
-    }
-    
-    #chat-form {
-        display: flex;
-        gap: 10px;
-    }
-    
-    #msg {
-        flex: 1;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        outline: none;
-    }
-    
-    #recipient-selector {
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        outline: none;
-    }
-    
-    .btn {
-        padding: 10px 15px;
-        background: #4a69bd;
-        color: #fff;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: background 0.3s;
-    }
-    
-    .btn:hover {
-        background: #3c5aa6;
-    }
-    
-    @media (max-width: 700px) {
-        .chat-main {
-            flex-direction: column;
-        }
-        
-        .chat-sidebar {
-            width: 100%;
-            height: 150px;
-        }
-        
-        .message {
-            max-width: 90%;
-        }
-    }
-    </style>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <title>ZeroChat</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="chat-container">
@@ -787,18 +619,18 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 </select>
             </div>
         </header>
-        
         <main class="chat-main">
             <div class="chat-sidebar">
                 <h3>Usuarios en línea</h3>
-                <ul id="users-list"></ul>
+                <ul id="users"></ul>
             </div>
-            
             <div class="chat-messages" id="chat-messages"></div>
         </main>
-        
         <div class="chat-form-container">
             <form id="chat-form">
+                <select id="recipient-selector">
+                    <option value="all">Todos</option>
+                </select>
                 <input
                     id="msg"
                     type="text"
@@ -806,82 +638,85 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                     required
                     autocomplete="off"
                 />
-                <select id="recipient-selector">
-                    <option value="all">Todos</option>
-                </select>
-                <button type="button" id="send-button" class="btn">Enviar</button>
+                <button class="btn">Enviar</button>
             </form>
         </div>
     </div>
 
     <script>
-    // Mantener un registro de los mensajes ya mostrados
-    const messageIds = new Set();
-    
-    // Nombre de usuario real
-    const username = ')" + realUsername + R"(';
-    
-    function loadMessages() {
-        fetch('/api/messages')
-            .then(response => response.json())
-            .then(data => {
-                // Limpiar todos los mensajes existentes
-                const chatMessages = document.getElementById('chat-messages');
-                chatMessages.innerHTML = '';
-                messageIds.clear();
-                
-                // Añadir todos los mensajes
-                data.messages.forEach(message => {
-                    const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
-                    if (!messageIds.has(messageId)) {
-                        messageIds.add(messageId);
-                        const isOutgoing = message.sender === username;
-                        outputMessage(message, isOutgoing);
-                    }
-                });
-                
-                // Scroll hacia abajo
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-            })
-            .catch(error => console.error('Error cargando mensajes:', error));
-    }
-    
-    document.addEventListener('DOMContentLoaded', function() {
-        // Referencias a elementos del DOM
         const chatForm = document.getElementById('chat-form');
-        const sendButton = document.getElementById('send-button');
         const chatMessages = document.getElementById('chat-messages');
-        const usersList = document.getElementById('users-list');
+        const usersList = document.getElementById('users');
         const msgInput = document.getElementById('msg');
         const recipientSelector = document.getElementById('recipient-selector');
         const statusSelector = document.getElementById('status-selector');
+        const username = document.getElementById('username').textContent;
         
-        // Cargar usuarios
+        // Conjunto para almacenar IDs de mensajes y evitar duplicados
+        const messageIds = new Set();
+        
+        // Variable global para el destinatario seleccionado
+        let selectedRecipient = 'all';
+        
+        // Cargar usuarios y mensajes al inicio
         loadUsers();
-        
-        // Cargar mensajes
         loadMessages();
         
         // Configurar polling para actualizaciones
-        setInterval(checkUpdates, 3000);
+        setInterval(checkUpdates, 5000);
         
         // Event listeners
-        chatForm.addEventListener('submit', function(e) {
-            e.preventDefault(); // Prevenir el envío del formulario
-            sendMessage();
-        });
-        
-        // Añadir evento al botón también
-        sendButton.addEventListener('click', function() {
-            sendMessage();
-        });
-        
-        // Permitir enviar con Enter
-        msgInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                sendMessage();
+        chatForm.addEventListener('submit', e => {
+            e.preventDefault();
+            
+            // Obtener mensaje y destinatario
+            const msg = msgInput.value.trim();
+            const recipient = recipientSelector.value;
+            
+            if (msg) {
+                // Enviar mensaje al servidor
+                fetch('/api/message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        recipient: recipient,
+                        content: msg
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        // Crear objeto de mensaje para mostrar inmediatamente
+                        const messageObj = {
+                            sender: username,
+                            content: msg,
+                            timestamp: getCurrentTime(),
+                            type: recipient === 'all' ? 'broadcast' : 'private'
+                        };
+                        
+                        // Mostrar mensaje en la interfaz
+                        outputMessage(messageObj, true);
+                        
+                        // Añadir el ID del mensaje al conjunto para evitar duplicados
+                        const messageId = messageObj.timestamp + '-' + messageObj.sender + '-' + messageObj.content;
+                        messageIds.add(messageId);
+                        
+                        // Limpiar input y hacer scroll
+                        msgInput.value = '';
+                        msgInput.focus();
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    }
+                })
+                .catch(error => console.error('Error enviando mensaje:', error));
             }
+        });
+        
+        // Evento change para el selector de destinatarios
+        recipientSelector.addEventListener('change', function(e) {
+            selectedRecipient = e.target.value;
+            console.log('Destinatario seleccionado:', selectedRecipient);
         });
         
         statusSelector.addEventListener('change', changeStatus);
@@ -898,6 +733,9 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                     
                     // Actualizar el selector de destinatarios
                     recipientSelector.innerHTML = '<option value="all">Todos</option>';
+                    
+                    // Variable para verificar si el destinatario seleccionado sigue disponible
+                    let recipientStillExists = selectedRecipient === 'all';
                     
                     // Añadir cada usuario a la lista y al selector
                     data.users.forEach(user => {
@@ -917,59 +755,27 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                             const option = document.createElement('option');
                             option.value = user.username;
                             option.textContent = user.username;
+                            
+                            // Verificar si este es el destinatario seleccionado
+                            if (user.username === selectedRecipient) {
+                                recipientStillExists = true;
+                            }
+                            
                             recipientSelector.appendChild(option);
                         }
                     });
+                    
+                    // Restaurar la selección o cambiar a 'all' si el destinatario ya no existe
+                    if (recipientStillExists) {
+                        recipientSelector.value = selectedRecipient;
+                    } else {
+                        recipientSelector.value = 'all';
+                        selectedRecipient = 'all';
+                    }
+                    
+                    console.log('Destinatario restaurado:', recipientSelector.value);
                 })
                 .catch(error => console.error('Error cargando usuarios:', error));
-        }
-        
-        function sendMessage() {
-            // Obtener mensaje y destinatario
-            const msg = msgInput.value;
-            const recipient = recipientSelector.value;
-            
-            if (!msg) return;
-            
-            console.log("Enviando mensaje:", msg, "a:", recipient);
-            
-            // Enviar mensaje al servidor
-            fetch('/api/message', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    recipient: recipient,
-                    content: msg
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log("Respuesta del servidor:", data);
-                if (data.status === 'ok') {
-                    // Añadir mensaje a la interfaz
-                    const messageObj = {
-                        sender: username,
-                        content: msg,
-                        timestamp: getCurrentTime(),
-                        type: recipient === 'all' ? 'broadcast' : 'private'
-                    };
-                    
-                    // Añadir el mensaje como saliente (verde, a la derecha)
-                    outputMessage(messageObj, true);
-                    
-                    // Añadir el ID del mensaje al conjunto para evitar duplicados
-                    const messageId = messageObj.timestamp + '-' + messageObj.sender + '-' + messageObj.content;
-                    messageIds.add(messageId);
-                    
-                    // Limpiar input y hacer scroll
-                    msgInput.value = '';
-                    msgInput.focus();
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            })
-            .catch(error => console.error('Error enviando mensaje:', error));
         }
         
         function changeStatus(e) {
@@ -998,49 +804,82 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 .then(response => response.json())
                 .then(data => {
                     if (data.type === 'update') {
-                        // Actualizar usuarios y mensajes si hay cambios
+                        // Guardar la selección actual
+                        const currentSelection = recipientSelector.value;
+                        
+                        // Actualizar usuarios y mensajes
                         loadUsers();
                         loadMessages();
+                        
+                        // Asegurarse de que la selección se mantenga después de un breve retraso
+                        setTimeout(() => {
+                            if (recipientSelector.value !== currentSelection) {
+                                recipientSelector.value = currentSelection;
+                                console.log('Selección restaurada después de actualización:', currentSelection);
+                            }
+                        }, 100);
                     }
                 })
                 .catch(error => console.error('Error en polling:', error));
         }
-    });
-    
-    function outputMessage(message, outgoing = false) {
-        const chatMessages = document.getElementById('chat-messages');
-        const div = document.createElement('div');
-        div.classList.add('message');
-        div.classList.add(message.type);
         
-        if (outgoing) {
-            div.classList.add('outgoing');
+        function loadMessages() {
+            fetch('/api/messages')
+                .then(response => response.json())
+                .then(data => {
+                    // Limpiar todos los mensajes existentes
+                    chatMessages.innerHTML = '';
+                    messageIds.clear();
+                    
+                    // Añadir todos los mensajes
+                    data.messages.forEach(message => {
+                        const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
+                        if (!messageIds.has(messageId)) {
+                            messageIds.add(messageId);
+                            const isOutgoing = message.sender === username;
+                            outputMessage(message, isOutgoing);
+                        }
+                    });
+                    
+                    // Scroll hacia abajo
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                })
+                .catch(error => console.error('Error cargando mensajes:', error));
         }
         
-        div.innerHTML = `
-            <div class="meta">
-                <span class="sender">${message.sender}</span>
-                <span class="time">${message.timestamp}</span>
-            </div>
-            <p class="text">${message.content}</p>
-        `;
-        
-        chatMessages.appendChild(div);
-    }
-    
-    function getCurrentTime() {
-        const now = new Date();
-        return `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-    }
-    
-    function getStatusText(status) {
-        switch (status) {
-            case 'ACTIVO': return 'Activo';
-            case 'OCUPADO': return 'Ocupado';
-            case 'INACTIVO': return 'Inactivo';
-            default: return status;
+        function outputMessage(message, outgoing = false) {
+            const div = document.createElement('div');
+            div.classList.add('message');
+            div.classList.add(message.type);
+            
+            if (outgoing) {
+                div.classList.add('outgoing');
+            }
+            
+            div.innerHTML = `
+                <div class="meta">
+                    <span class="sender">${message.sender}</span>
+                    <span class="time">${message.timestamp}</span>
+                </div>
+                <p class="text">${message.content}</p>
+            `;
+            
+            chatMessages.appendChild(div);
         }
-    }
+        
+        function getCurrentTime() {
+            const now = new Date();
+            return `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+        
+        function getStatusText(status) {
+            switch (status) {
+                case 'ACTIVO': return 'Activo';
+                case 'OCUPADO': return 'Ocupado';
+                case 'INACTIVO': return 'Inactivo';
+                default: return status;
+            }
+        }
     </script>
 </body>
 </html>)";
@@ -1094,10 +933,11 @@ void WebUI::handlePostMessage(const httplib::Request& req, httplib::Response& re
     // Enviar mensaje usando el cliente
     client_->sendMessage(recipient, content);
     
-    // Responder con éxito
+    // Responder con éxito y el tipo de mensaje
     json response = {
         {"status", "ok"},
-        {"message", "Mensaje enviado correctamente"}
+        {"message", "Mensaje enviado correctamente"},
+        {"type", recipient == "all" ? "broadcast" : "private"}
     };
     
     res.set_content(response.dump(), "application/json");
