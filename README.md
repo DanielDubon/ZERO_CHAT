@@ -68,15 +68,23 @@ Si no se incluyeron las librerias de external/json/ y external/cpp-httlib/ , sig
 
 ```bash
 
-# 1.  Desde la carpeta raíz, añadir los submódulos
+# 1. Eliminar las carpetas del índice de Git (si existen)
+git rm -r --cached external/cpp-httplib
+git rm -r --cached external/json
+
+# 2. Eliminar las carpetas físicas (opcional)
+rm -rf external/cpp-httplib
+rm -rf external/json
+
+# 3.  Desde la carpeta raíz, añadir los submódulos
 git submodule add https://github.com/yhirose/cpp-httplib.git external/cpp-httplib
 git submodule add https://github.com/nlohmann/json.git external/json
 
-# 2. Inicializar y actualizar los submódulos
+# 4. Inicializar y actualizar los submódulos
 git submodule init
 git submodule update
 
-# 3. Verificar que los archivos estén disponibles
+# 5. Verificar que los archivos estén disponibles
 ls -la external/cpp-httplib/httplib.h
 ls -la external/json/single_include/nlohmann/json.hpp
 
