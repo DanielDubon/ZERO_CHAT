@@ -64,37 +64,23 @@ git submodule update
 
 ## Configuración de submódulos (solo para administradores)
 
-Si necesitas configurar los submódulos desde cero, sigue estos pasos:
+Si no se incluyeron las librerias de external/json/ y external/cpp-httlib/ , sigue estos pasos:
 
 ```bash
-# 1. Eliminar las carpetas del índice de Git (si existen)
-git rm -r --cached external/cpp-httplib
-git rm -r --cached external/json
 
-# 2. Hacer commit de los cambios
-git commit -m "Remove external libraries before adding them as submodules"
-
-# 3. Eliminar las carpetas físicas (opcional)
-rm -rf external/cpp-httplib
-rm -rf external/json
-
-# 4. Añadir los submódulos
+# 1.  Desde la carpeta raíz, añadir los submódulos
 git submodule add https://github.com/yhirose/cpp-httplib.git external/cpp-httplib
 git submodule add https://github.com/nlohmann/json.git external/json
 
-# 5. Inicializar y actualizar los submódulos
+# 2. Inicializar y actualizar los submódulos
 git submodule init
 git submodule update
 
-# 6. Verificar que los archivos estén disponibles
+# 3. Verificar que los archivos estén disponibles
 ls -la external/cpp-httplib/httplib.h
 ls -la external/json/single_include/nlohmann/json.hpp
 
-# 7. Hacer commit de los cambios
-git add .gitmodules
-git add external/
-git commit -m "Add cpp-httplib and json as Git submodules"
-git push
+
 ```
 
 ## Ejecución
