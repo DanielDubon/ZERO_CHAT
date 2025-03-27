@@ -328,23 +328,34 @@ function loadMessages() {
     fetch('/api/messages')
         .then(response => response.json())
         .then(data => {
-            // Limpiar todos los mensajes existentes
-            const chatMessages = document.getElementById('chat-messages');
-            chatMessages.innerHTML = '';
-            messageIds.clear();
+            console.log('Cargando mensajes, cantidad recibida:', data.messages.length);
             
-            // Añadir todos los mensajes
-            data.messages.forEach(message => {
-                const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
-                if (!messageIds.has(messageId)) {
-                    messageIds.add(messageId);
-                    const isOutgoing = message.sender === username;
-                    outputMessage(message, isOutgoing);
-                }
-            });
-            
-            // Scroll hacia abajo
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            // Solo limpiar los mensajes si hay nuevos mensajes
+            if (data.messages.length > 0) {
+                // Limpiar todos los mensajes existentes
+                chatMessages.innerHTML = '';
+                messageIds.clear();
+                
+                // Añadir todos los mensajes
+                data.messages.forEach(message => {
+                    // Forzar el tipo de mensaje basado en el contenido
+                    if (message.content.startsWith('Broadcast mensaje')) {
+                        message.type = 'broadcast';
+                    }
+                    
+                    const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
+                    if (!messageIds.has(messageId)) {
+                        messageIds.add(messageId);
+                        const isOutgoing = message.sender === username;
+                        outputMessage(message, isOutgoing);
+                    }
+                });
+                
+                // Scroll hacia abajo
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            } else {
+                console.log('No hay nuevos mensajes para mostrar');
+            }
         })
         .catch(error => console.error('Error cargando mensajes:', error));
 }
@@ -380,6 +391,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const recipient = recipientSelector.value;
         
         if (msg) {
+            console.log('Enviando mensaje a:', recipient, 'Contenido:', msg);
+            
             // Enviar mensaje al servidor
             fetch('/api/message', {
                 method: 'POST',
@@ -394,6 +407,8 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'ok') {
+                    console.log('Mensaje enviado con éxito, tipo:', data.type);
+                    
                     // Crear objeto de mensaje para mostrar inmediatamente
                     const messageObj = {
                         sender: username,
@@ -401,6 +416,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         timestamp: getCurrentTime(),
                         type: recipient === 'all' ? 'broadcast' : 'private'
                     };
+                    
+                    console.log('Objeto de mensaje creado:', messageObj);
                     
                     // Mostrar mensaje en la interfaz
                     outputMessage(messageObj, true);
@@ -513,9 +530,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Guardar la selección actual
                     const currentSelection = recipientSelector.value;
                     
-                    // Actualizar usuarios y mensajes
+                    // Solo actualizar usuarios, no mensajes
                     loadUsers();
-                    loadMessages();
+                    
+                    // Cargar mensajes solo si es necesario
+                    fetch('/api/messages')
+                        .then(response => response.json())
+                        .then(msgData => {
+                            if (msgData.messages.length > 0) {
+                                loadMessages();
+                            }
+                        });
                     
                     // Asegurarse de que la selección se mantenga después de un breve retraso
                     setTimeout(() => {
@@ -530,12 +555,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function outputMessage(message, outgoing = false) {
-        const chatMessages = document.getElementById('chat-messages');
+        console.log('Mostrando mensaje:', message, 'Outgoing:', outgoing);
+        
         const div = document.createElement('div');
         div.classList.add('message');
         div.classList.add(message.type);
         
-        if (outgoing) div.classList.add('outgoing');
+        if (outgoing) {
+            div.classList.add('outgoing');
+        }
+        
+        console.log('Clases añadidas:', div.className);
         
         div.innerHTML = `
             <div class="meta">
@@ -674,6 +704,8 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
             const recipient = recipientSelector.value;
             
             if (msg) {
+                console.log('Enviando mensaje a:', recipient, 'Contenido:', msg);
+                
                 // Enviar mensaje al servidor
                 fetch('/api/message', {
                     method: 'POST',
@@ -688,6 +720,8 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'ok') {
+                        console.log('Mensaje enviado con éxito, tipo:', data.type);
+                        
                         // Crear objeto de mensaje para mostrar inmediatamente
                         const messageObj = {
                             sender: username,
@@ -695,6 +729,8 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                             timestamp: getCurrentTime(),
                             type: recipient === 'all' ? 'broadcast' : 'private'
                         };
+                        
+                        console.log('Objeto de mensaje creado:', messageObj);
                         
                         // Mostrar mensaje en la interfaz
                         outputMessage(messageObj, true);
@@ -807,9 +843,17 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                         // Guardar la selección actual
                         const currentSelection = recipientSelector.value;
                         
-                        // Actualizar usuarios y mensajes
+                        // Solo actualizar usuarios, no mensajes
                         loadUsers();
-                        loadMessages();
+                        
+                        // Cargar mensajes solo si es necesario
+                        fetch('/api/messages')
+                            .then(response => response.json())
+                            .then(msgData => {
+                                if (msgData.messages.length > 0) {
+                                    loadMessages();
+                                }
+                            });
                         
                         // Asegurarse de que la selección se mantenga después de un breve retraso
                         setTimeout(() => {
@@ -827,27 +871,41 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
             fetch('/api/messages')
                 .then(response => response.json())
                 .then(data => {
-                    // Limpiar todos los mensajes existentes
-                    chatMessages.innerHTML = '';
-                    messageIds.clear();
+                    console.log('Cargando mensajes, cantidad recibida:', data.messages.length);
                     
-                    // Añadir todos los mensajes
-                    data.messages.forEach(message => {
-                        const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
-                        if (!messageIds.has(messageId)) {
-                            messageIds.add(messageId);
-                            const isOutgoing = message.sender === username;
-                            outputMessage(message, isOutgoing);
-                        }
-                    });
-                    
-                    // Scroll hacia abajo
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    // Solo limpiar los mensajes si hay nuevos mensajes
+                    if (data.messages.length > 0) {
+                        // Limpiar todos los mensajes existentes
+                        chatMessages.innerHTML = '';
+                        messageIds.clear();
+                        
+                        // Añadir todos los mensajes
+                        data.messages.forEach(message => {
+                            // Forzar el tipo de mensaje basado en el contenido
+                            if (message.content.startsWith('Broadcast mensaje')) {
+                                message.type = 'broadcast';
+                            }
+                            
+                            const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
+                            if (!messageIds.has(messageId)) {
+                                messageIds.add(messageId);
+                                const isOutgoing = message.sender === username;
+                                outputMessage(message, isOutgoing);
+                            }
+                        });
+                        
+                        // Scroll hacia abajo
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    } else {
+                        console.log('No hay nuevos mensajes para mostrar');
+                    }
                 })
                 .catch(error => console.error('Error cargando mensajes:', error));
         }
         
         function outputMessage(message, outgoing = false) {
+            console.log('Mostrando mensaje:', message, 'Outgoing:', outgoing);
+            
             const div = document.createElement('div');
             div.classList.add('message');
             div.classList.add(message.type);
@@ -855,6 +913,8 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
             if (outgoing) {
                 div.classList.add('outgoing');
             }
+            
+            console.log('Clases añadidas:', div.className);
             
             div.innerHTML = `
                 <div class="meta">
@@ -898,17 +958,26 @@ void WebUI::handleGetMessages(const httplib::Request& req, httplib::Response& re
     // Imprimir información de depuración
     std::cout << "Número de mensajes del cliente: " << clientMessages.size() << std::endl;
     
+    if (clientMessages.empty()) {
+        std::cout << "No hay mensajes para mostrar" << std::endl;
+    }
+    
     for (const auto& msg : clientMessages) {
+        // Determinar el tipo de mensaje basado en el destinatario
+        std::string type = (msg.getReceiver() == "all") ? "broadcast" : "private";
+        
         json message = {
             {"sender", msg.getSender()},
             {"content", msg.getContent()},
             {"timestamp", msg.getTimestamp()},
-            {"type", msg.getType()}
+            {"type", type}  // Usar el tipo determinado aquí
         };
         messages.push_back(message);
         
         // Imprimir información de depuración
-        std::cout << "Mensaje: " << msg.getSender() << ": " << msg.getContent() << std::endl;
+        std::cout << "Mensaje: " << msg.getSender() << " -> " << msg.getReceiver() 
+                  << " (tipo: " << type << ", original: " << msg.getType() << "): " 
+                  << msg.getContent() << std::endl;
     }
     
     // Crear la respuesta

@@ -3,6 +3,7 @@
 
 #include <string>
 #include <ctime>
+#include <chrono>
 
 class Message {
 public:
@@ -20,6 +21,7 @@ private:
     std::string receiver_;
     std::string content_;
     std::time_t timestamp_;
+    std::string type_;  // almacenar el tipo
 };
 
 #endif // MESSAGE_H 

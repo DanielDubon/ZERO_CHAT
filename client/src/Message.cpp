@@ -2,15 +2,18 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
-Message::Message()
-    : sender_(""), receiver_(""), content_(""), timestamp_(std::time(nullptr))
-{
-}
+Message::Message() : timestamp_(std::time(nullptr)), type_("broadcast") {}
 
 Message::Message(const std::string& sender, const std::string& receiver, const std::string& content)
-    : sender_(sender), receiver_(receiver), content_(content), timestamp_(std::time(nullptr))
-{
+    : sender_(sender), receiver_(receiver), content_(content), timestamp_(std::time(nullptr)) {
+    // Determinar el tipo de mensaje basado en el destinatario
+    type_ = (receiver == "all") ? "broadcast" : "private";
+    
+    // Depuración
+    std::cout << "Creando mensaje: " << sender << " -> " << receiver 
+              << " (" << type_ << "): " << content << std::endl;
 }
 
 std::string Message::getSender() const {
@@ -33,5 +36,5 @@ std::string Message::getTimestamp() const {
 }
 
 std::string Message::getType() const {
-    return (receiver_ == "all" || receiver_.empty()) ? "broadcast" : "private";
+    return type_;
 } 
