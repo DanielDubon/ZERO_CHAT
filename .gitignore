@@ -3,6 +3,7 @@
 *.out
 */test_protocol
 */test_server
+*/libprotocol.a
 
 # Editor/OS-specific
 .DS_Store
