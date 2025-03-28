@@ -59,7 +59,7 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
 
     if (recipient == "all") {
         messageType = 4;  // BROADCAST_MESSAGE
-        fields = {username_, message};
+        fields = {"all", message};
         std::cout << "Mensaje enviado a todos: " << message << std::endl;
         
         // Añadir el mensaje al almacén local para mostrarlo en la UI
