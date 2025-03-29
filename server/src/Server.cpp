@@ -175,26 +175,6 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
             }
         
             break;
-        }
-        
-        case 7: { // Cambio de estado
-            // Se esperan 2 campos: [username, newStatus]
-            if (fields.size() < 2) return;
-            std::string username = Protocol::bytesToString(fields[0]);
-            std::string newStatus = Protocol::bytesToString(fields[1]);
-        
-            // Actualizas la info
-            auto it = users_.find(username);
-            if (it != users_.end()) {
-                it->second->setStatus(newStatus);
-                std::cout << "[LOG] El usuario " << username 
-                          << " ahora es: " << newStatus << std::endl;
-                // 2) Notificar a todos con la nueva lista
-                for (auto &conn : connections_) {
-                    sendUserList(conn.second);
-                }
-            }
-            break;
         }        
 
         case 99: { // LOGOUT
@@ -237,10 +217,9 @@ void Server::sendUserList(struct lws *wsi) {
     std::vector<std::string> userList;
     for (const auto& user : users_) {
         userList.push_back(user.first);
-        userList.push_back(user.second->getStatus());
     }
     
     // Serializar y enviar la lista
-    auto response = Protocol::serializeMessage(5, userList);  // 5: SERVER_LIST_RESPONSE
+    auto response = Protocol::serializeMessage(51, userList);  // 51: SERVER_LIST
     sendMessage(wsi, response);
 }
