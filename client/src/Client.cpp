@@ -82,10 +82,6 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
 void Client::setStatus(const std::string& status) {
     status_ = status;
     std::cout << "Estado actualizado a: " << status_ << std::endl;
-
-    std::vector<std::string> fields = {username_, status_};
-    auto msg = Protocol::serializeMessage(7, fields);
-    ws_.send(Protocol::bytesToString(msg));
 }
 
 // Listar usuarios conectados
@@ -172,19 +168,16 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                 std::lock_guard<std::mutex> lock(usersMutex_);
                 connectedUsers_.clear();
                 
-                for (size_t i = 0; i + 1 < fields.size(); i += 2) {
-                    std::string username = Protocol::bytesToString(fields[i]);
-                    std::string status   = Protocol::bytesToString(fields[i + 1]);
-
-                    std::cout << "- " << username << " estado: " << status;
+                for (const auto& field : fields) {
+                    std::string username = Protocol::bytesToString(field);
+                    std::cout << "- " << username << std::endl;
                     
                     // Añadir a la lista de usuarios conectados
                     if (username == username_) {
-                        std::cout << " (tú)";
+                        connectedUsers_.push_back({username, status_});
+                    } else {
+                        connectedUsers_.push_back({username, "ACTIVO"});
                     }
-                    std::cout << std::endl;
-
-                    connectedUsers_.push_back({username, status});
                 }
                 displayPrompt();
             }
