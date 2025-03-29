@@ -133,23 +133,49 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
 
             // Preparar mensaje para reenviar
             std::vector<std::string> messageFields = {session->username, content};
-            auto response = Protocol::serializeMessage(55, messageFields);  // 55: SERVER_MESSAGE
 
-            if (dest != "all") {
-                auto it = connections_.find(dest);
-                if (it != connections_.end()) {
-                    sendMessage(it->second, response);
-                }
-            } else {
-                // Broadcast a todos los usuarios
+            if (dest == "all") {
+                // Reenviar con code=4
+                auto response = Protocol::serializeMessage(4, messageFields); 
+                // Mandar a todos menos el emisor
                 for (const auto& conn : connections_) {
-                    if (conn.first != session->username) {  // No enviar al remitente
+                    if (conn.first != session->username) {
                         sendMessage(conn.second, response);
                     }
                 }
             }
+            
             break;
         }
+
+        case 54: { // Mensaje PRIVADO
+            // Esperamos 3 campos: [sender, destinatario, contenido]
+            if (fields.size() < 3) return;
+        
+            std::string sender   = Protocol::bytesToString(fields[0]);
+            std::string dest     = Protocol::bytesToString(fields[1]);
+            std::string content  = Protocol::bytesToString(fields[2]);
+        
+            std::cout << "[LOG] Mensaje privado de " << sender << " a " << dest << ": " << content << std::endl;
+        
+            // Prepara la respuesta con code=55 para que el cliente lo muestre como privado
+            std::vector<std::string> messageFields = {sender, content};
+            auto response = Protocol::serializeMessage(55, messageFields);
+        
+            // Enviar al destinatario
+            auto it = connections_.find(dest);
+            if (it != connections_.end()) {
+                sendMessage(it->second, response);
+            }
+        
+            // Opcional: si quieres que el emisor también vea su propio mensaje privado, reenvíale una copia
+            auto me = connections_.find(sender);
+            if (me != connections_.end()) {
+                sendMessage(me->second, response);
+            }
+        
+            break;
+        }        
 
         case 99: { // LOGOUT
             if (session && !session->username.empty()) {
