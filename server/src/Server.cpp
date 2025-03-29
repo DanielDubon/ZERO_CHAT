@@ -148,6 +148,27 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
             break;
         }
 
+        case 7: { // Cambio de estado
+            // Se esperan 2 campos: [username, newStatus]
+            if (fields.size() < 2) return;
+        
+            std::string username = Protocol::bytesToString(fields[0]);
+            std::string newStatus = Protocol::bytesToString(fields[1]);
+        
+            // Actualizar en users_
+            auto it = users_.find(username);
+            if (it != users_.end()) {
+                it->second->setStatus(newStatus);
+                std::cout << "[LOG] El usuario " << username << " ahora es: " << newStatus << std::endl;
+                
+                // Reenviar la lista actualizada a todos
+                for (auto &conn : connections_) {
+                    sendUserList(conn.second);
+                }
+            }
+            break;
+        }        
+
         case 54: { // Mensaje PRIVADO
             // Esperamos 3 campos: [sender, destinatario, contenido]
             if (fields.size() < 3) return;
@@ -215,11 +236,12 @@ bool Server::sendMessage(struct lws *wsi, const std::vector<uint8_t>& data) {
 void Server::sendUserList(struct lws *wsi) {
     std::lock_guard<std::mutex> lock(usersMutex_);
     std::vector<std::string> userList;
-    for (const auto& user : users_) {
-        userList.push_back(user.first);
+
+    for (const auto& kv : users_) {
+        userList.push_back(kv.first);                   
+        userList.push_back(kv.second->getStatus());     
     }
     
-    // Serializar y enviar la lista
-    auto response = Protocol::serializeMessage(51, userList);  // 51: SERVER_LIST
+    auto response = Protocol::serializeMessage(5, userList);
     sendMessage(wsi, response);
 }

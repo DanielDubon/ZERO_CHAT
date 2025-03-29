@@ -79,10 +79,15 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
 }
 
 // Establecer el estado del usuario
-void Client::setStatus(const std::string& status) {
-    status_ = status;
+void Client::setStatus(const std::string& newStatus) {
+    status_ = newStatus;
     std::cout << "Estado actualizado a: " << status_ << std::endl;
+
+    std::vector<std::string> fields = {username_, newStatus};
+    auto msg = Protocol::serializeMessage(7, fields);
+    ws_.send(Protocol::bytesToString(msg));
 }
+
 
 // Listar usuarios conectados
 void Client::listConnectedUsers() {
@@ -168,17 +173,21 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                 std::lock_guard<std::mutex> lock(usersMutex_);
                 connectedUsers_.clear();
                 
-                for (const auto& field : fields) {
-                    std::string username = Protocol::bytesToString(field);
-                    std::cout << "- " << username << std::endl;
-                    
-                    // Añadir a la lista de usuarios conectados
+                for (size_t i = 0; i + 1 < fields.size(); i += 2) {
+                    std::string username = Protocol::bytesToString(fields[i]);
+                    std::string status   = Protocol::bytesToString(fields[i + 1]);
+            
+                    std::cout << "- " << username << " estado: " << status;
                     if (username == username_) {
-                        connectedUsers_.push_back({username, status_});
-                    } else {
-                        connectedUsers_.push_back({username, "ACTIVO"});
+                        this->status_ = status;
+                        std::cout << " (tú)";
                     }
+                    std::cout << std::endl;
+            
+                    // Almacenar en connectedUsers_
+                    connectedUsers_.push_back({username, status});
                 }
+            
                 displayPrompt();
             }
             break;
