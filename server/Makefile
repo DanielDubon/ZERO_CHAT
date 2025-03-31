@@ -9,7 +9,6 @@ SRCS = src/main.cpp \
        src/Server.cpp \
        src/Message.cpp \
        src/User.cpp \
-       src/WebSocket.cpp \
        ../common/src/Protocol.cpp
 
 OBJS = $(SRCS:.cpp=.o)
