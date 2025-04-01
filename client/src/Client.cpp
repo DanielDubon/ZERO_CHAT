@@ -58,15 +58,14 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
     uint8_t messageType = 4;
     std::vector<std::string> fields;
     
-    if (recipient == "~") {
-        // Para chat general, el destino debe ser "~"
+    if (recipient == "all" || recipient == "~") {
+        // Para chat general, se transforma "all" en "~"
         fields = {"~", message};
         std::cout << "Mensaje broadcast enviado: " << message << std::endl;
-        // Almacenar localmente el mensaje usando "~" como receptor
         Message msg(username_, "~", message);
         addMessage(msg);
     } else {
-        // Para mensaje privado, el primer campo es el destinatario
+        // Mensaje privado
         fields = {recipient, message};
         std::cout << "Mensaje privado enviado a " << recipient << ": " << message << std::endl;
         Message msg(username_, recipient, message);
@@ -199,9 +198,9 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                 std::string origen = Protocol::bytesToString(fields[0]);
                 std::string contenido = Protocol::bytesToString(fields[1]);
                 std::cout << "\n[" << origen << "]: " << contenido << std::endl;
-                // Crear el mensaje; si se trata de un mensaje broadcast, se asigna "~" como receptor.
-                std::string receptor = (origen == username_) ? "~" : origen; // Opcional, según tu lógica
-                Message msg(origen, receptor, contenido);
+                
+                // Para este ejemplo, asumimos que los mensajes recibidos con código 55 son broadcast.
+                Message msg(origen, "~", contenido);
                 addMessage(msg);
             }
             break;
