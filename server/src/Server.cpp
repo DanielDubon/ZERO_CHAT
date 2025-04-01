@@ -78,6 +78,12 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
                 server->connections_[session->username] = wsi;
         
                 std::cout << "[LOG] Usuario " << session->username << " conectado." << std::endl;
+                
+                // Notificar a todos los clientes sobre la nueva lista de usuarios
+                std::lock_guard<std::mutex> lock(server->usersMutex_);
+                for (const auto& conn : server->connections_) {
+                    server->sendUserList(conn.second);
+                }
             }
             break;
         }
