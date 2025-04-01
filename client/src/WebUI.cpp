@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadMessages();
     
     // Configurar polling para actualizaciones
-    setInterval(checkUpdates, 5000);
+    setInterval(checkUpdates, 1000);
     
     // Event listeners
     chatForm.addEventListener('submit', e => {
@@ -693,7 +693,7 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
         loadMessages();
         
         // Configurar polling para actualizaciones
-        setInterval(checkUpdates, 5000);
+        setInterval(checkUpdates, 1000);
         
         // Event listeners
         chatForm.addEventListener('submit', e => {

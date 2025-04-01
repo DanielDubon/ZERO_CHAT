@@ -152,26 +152,24 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
             }
             break;
         }
-        case 53: { // Usuario se acaba de registrar (broadcast)
+        case 53: { // Usuario se acaba de registrar
             if (fields.size() >= 2) {
-                std::string uname = Protocol::bytesToString(fields[0]);
-                std::string status = Protocol::bytesToString(fields[1]);
-                std::cout << "\nNuevo usuario registrado: " << uname 
-                          << " (" << status << ")" << std::endl;
+                std::string newUser = Protocol::bytesToString(fields[0]);
+                std::string newStatus = Protocol::bytesToString(fields[1]);
                 {
                     std::lock_guard<std::mutex> lock(usersMutex_);
-                    // Agregar a la lista local si no existe
-                    bool found = false;
-                    for (const auto &u : connectedUsers_) {
-                        if (u.first == uname) {
-                            found = true;
+                    bool exists = false;
+                    for (auto &u : connectedUsers_) {
+                        if (u.first == newUser) {
+                            exists = true;
                             break;
                         }
                     }
-                    if (!found) {
-                        connectedUsers_.push_back({uname, status});
+                    if (!exists) {
+                        connectedUsers_.push_back({newUser, newStatus});
                     }
                 }
+               
             }
             break;
         }
@@ -190,6 +188,7 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                         }
                     }
                 }
+                
             }
             break;
         }
