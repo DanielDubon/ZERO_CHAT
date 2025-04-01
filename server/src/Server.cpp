@@ -93,8 +93,16 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
 
         case LWS_CALLBACK_CLOSED: {
             if (session && !session->username.empty()) {
-                server->unregisterUser(session->username);
-                std::cout << "Usuario " << session->username << " desconectado" << std::endl;
+                std::string disconnectedUser = session->username;
+                server->unregisterUser(disconnectedUser);
+                std::cout << "Usuario " << disconnectedUser << " desconectado" << std::endl;
+                // Remover también la conexión del mapa de conexiones
+                server->connections_.erase(disconnectedUser);
+                // Notificar a todos los clientes con la lista actualizada
+                std::lock_guard<std::mutex> lock(server->usersMutex_);
+                for (const auto& conn : server->connections_) {
+                    server->sendUserList(conn.second);
+                }
             }
             break;
         }
