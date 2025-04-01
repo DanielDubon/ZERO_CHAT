@@ -49,7 +49,7 @@ bool WebSocket::connect(const std::string& host, int port, const std::string& pa
     conn_info.context = context_;
     conn_info.address = host.c_str();
     conn_info.port = port;
-    conn_info.path = "/";
+    conn_info.path = path.c_str();
     conn_info.host = host.c_str();
     conn_info.origin = host.c_str();
     conn_info.protocol = protocols_[0].name;

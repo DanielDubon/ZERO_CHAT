@@ -67,8 +67,18 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
 
     switch (reason) {
         case LWS_CALLBACK_ESTABLISHED: {
-            std::cout << "Nueva conexión WebSocket establecida" << std::endl;
+            std::cout << "Nueva conexión establecida" << std::endl;
             session->server = server;
+        
+            if (!session->username.empty()) {
+                // Crea el objeto User y márcalo como ACTIVO
+                auto userObj = std::make_shared<User>(session->username, "127.0.0.1");
+                userObj->setStatus("ACTIVO");
+                server->users_[session->username] = userObj;
+                server->connections_[session->username] = wsi;
+        
+                std::cout << "[LOG] Usuario " << session->username << " conectado." << std::endl;
+            }
             break;
         }
 
@@ -89,6 +99,50 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
             break;
         }
 
+        case LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION: {
+            // Buffer temporal para leer el valor de la query 'name'
+            char nameBuffer[128];
+            memset(nameBuffer, 0, sizeof(nameBuffer));
+
+            // Intenta obtener el valor de la query 'name='
+            // Retorna < 0 si no existe ese parámetro en la URL
+            if (lws_get_urlarg_by_name(wsi, "name", nameBuffer, sizeof(nameBuffer)) == NULL) {
+                std::cerr << "[ERROR] Falta parámetro 'name' en la query." << std::endl;
+                // Rechazamos la conexión
+                return 1; 
+            }
+
+            // nameBuffer contiene el valor después de 'name='
+            std::string candidateName(nameBuffer);
+
+            // Si candidateName empieza con "name=", removerla
+            const std::string prefix = "name=";
+            if (candidateName.compare(0, prefix.size(), prefix) == 0) {
+                candidateName = candidateName.substr(prefix.size());
+            }
+            
+            // Validaciones del protocolo
+            if (candidateName.empty() || candidateName == "~") {
+                std::cerr << "[ERROR] Nombre vacío o '~' no permitido." << std::endl;
+                return 1; // Rechaza la conexión
+            }
+
+            // Chequear si ya hay un usuario con ese nombre en línea
+            if (server->isUserOnline(candidateName)) {
+                std::cerr << "[ERROR] Usuario " << candidateName << " ya está en línea." << std::endl;
+                return 1; // Rechaza la conexión
+            }
+
+            // Si todo ok, guardamos el nombre en la SessionData para usarlo luego
+            session->username = candidateName;
+
+            // Podemos aceptar la conexión devolviendo 0
+            return 0;
+            break;
+        }
+
+        
+
         default:
             break;
     }
@@ -97,117 +151,111 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
 }
 
 void Server::handleClientData(struct lws *wsi, SessionData *session, 
-                            const std::vector<uint8_t>& data) {
+    const std::vector<uint8_t>& data) {
     uint8_t code;
     std::vector<std::vector<uint8_t>> fields;
-    
+
     if (!Protocol::deserializeMessage(data, code, fields)) {
         std::cerr << "Error: Mensaje mal formado" << std::endl;
         return;
     }
 
     switch (code) {
-        case 1: { // Registro
-            if (fields.empty()) return;
-            std::string username = Protocol::bytesToString(fields[0]);
-            session->username = username;
-            auto user = std::make_shared<User>(username, "127.0.0.1");
-            if (registerUser(username, user)) {
-                std::cout << "Usuario registrado: " << username << std::endl;
-                connections_[username] = wsi;  // Guardar la conexión
-                sendUserList(wsi);  // Enviar lista de usuarios al nuevo cliente
-            }
-            break;
-        }
-
-        case 2: { // Solicitud de lista de usuarios
+        case 1: { // Listar usuarios conectados
+            // No se esperan campos.
             sendUserList(wsi);
             break;
         }
 
-        case 4: { // Mensaje de chat
-            if (fields.size() < 2) return;
-            std::string dest = Protocol::bytesToString(fields[0]);
-            std::string content = Protocol::bytesToString(fields[1]);
-            std::cout << session->username << " -> " << dest << ": " << content << std::endl;
-
-            // Preparar mensaje para reenviar
-            std::vector<std::string> messageFields = {session->username, content};
-
-            if (dest == "all") {
-                // Reenviar con code=4
-                auto response = Protocol::serializeMessage(4, messageFields); 
-                // Mandar a todos menos el emisor
-                for (const auto& conn : connections_) {
-                    if (conn.first != session->username) {
-                        sendMessage(conn.second, response);
-                    }
+        case 2: { // Obtener un usuario por su nombre
+            if (fields.size() < 1) return;
+                std::string username = Protocol::bytesToString(fields[0]);
+                auto it = users_.find(username);
+                if (it != users_.end()) {
+                    // Respuesta con código 52: [Username, Status]
+                    std::vector<std::string> responseFields = { username, it->second->getStatus() };
+                    auto response = Protocol::serializeMessage(52, responseFields);
+                    sendMessage(wsi, response);
+                } else {
+                    // Error: usuario no existe (código 50 con error 1)
+                    std::vector<uint8_t> errorMsg = { 50, 1 };
+                    sendMessage(wsi, errorMsg);
                 }
-            }
-            
-            break;
+                    break;
         }
 
-        case 7: { // Cambio de estado
-            // Se esperan 2 campos: [username, newStatus]
+        case 3: { // Cambiar estatus de un usuario
+        // Se esperan 2 campos: [username, newStatus]
             if (fields.size() < 2) return;
-        
-            std::string username = Protocol::bytesToString(fields[0]);
-            std::string newStatus = Protocol::bytesToString(fields[1]);
-        
-            // Actualizar en users_
-            auto it = users_.find(username);
+                std::string username = Protocol::bytesToString(fields[0]);
+                std::string newStatus = Protocol::bytesToString(fields[1]);
+
+                auto it = users_.find(username);
             if (it != users_.end()) {
                 it->second->setStatus(newStatus);
                 std::cout << "[LOG] El usuario " << username << " ahora es: " << newStatus << std::endl;
-                
-                // Reenviar la lista actualizada a todos
+                // Notificar a todos (código 54: Usuario cambió estatus)
+                std::vector<std::string> responseFields = { username, newStatus };
+                auto response = Protocol::serializeMessage(54, responseFields);
                 for (auto &conn : connections_) {
-                    sendUserList(conn.second);
+                sendMessage(conn.second, response);
                 }
-            }
-            break;
-        }        
-
-        case 54: { // Mensaje PRIVADO
-            // Esperamos 3 campos: [sender, destinatario, contenido]
-            if (fields.size() < 3) return;
-        
-            std::string sender   = Protocol::bytesToString(fields[0]);
-            std::string dest     = Protocol::bytesToString(fields[1]);
-            std::string content  = Protocol::bytesToString(fields[2]);
-        
-            std::cout << "[LOG] Mensaje privado de " << sender << " a " << dest << ": " << content << std::endl;
-        
-            // Prepara la respuesta con code=55 para que el cliente lo muestre como privado
-            std::vector<std::string> messageFields = {sender, content};
-            auto response = Protocol::serializeMessage(55, messageFields);
-        
-            // Enviar al destinatario
-            auto it = connections_.find(dest);
-            if (it != connections_.end()) {
-                sendMessage(it->second, response);
-            }
-        
-            // Opcional: si quieres que el emisor también vea su propio mensaje privado, reenvíale una copia
-            auto me = connections_.find(sender);
-            if (me != connections_.end()) {
-                sendMessage(me->second, response);
-            }
-        
-            break;
-        }        
-
-        case 99: { // LOGOUT
-            if (session && !session->username.empty()) {
-                connections_.erase(session->username);
-                unregisterUser(session->username);
-                std::cout << "Usuario " << session->username << " desconectado" << std::endl;
-            }
-            break;
+                } else {
+                    // Error: usuario no existe
+                    std::vector<uint8_t> errorMsg = { 50, 1 };
+                    sendMessage(wsi, errorMsg);
+                 }
+                break;
         }
-    }
+
+        case 4: { // Mandar un mensaje
+            // Se esperan 2 campos: [destino, mensaje]
+            if (fields.size() < 2) return;
+                std::string dest = Protocol::bytesToString(fields[0]);
+                std::string content = Protocol::bytesToString(fields[1]);
+                std::cout << session->username << " -> " << dest << ": " << content << std::endl;
+
+            // Preparar respuesta con código 55: [origen, mensaje]
+                std::vector<std::string> responseFields = { session->username, content };
+                auto response = Protocol::serializeMessage(55, responseFields);
+
+                if (dest == "~") { // Chat general
+                for (auto &conn : connections_) {
+                sendMessage(conn.second, response);
+                }
+                } else { // Mensaje directo
+                auto it = connections_.find(dest);
+                if (it != connections_.end()) {
+                sendMessage(it->second, response);
+                // Opcional: reenviar copia al emisor
+                sendMessage(wsi, response);
+                } else {
+                // Error: destinatario desconectado (código 50 con error 4)
+                std::vector<uint8_t> errorMsg = { 50, 4 };
+                sendMessage(wsi, errorMsg);
+                }
+                }
+                break;
+                }
+
+                case 5: { // Obtener Mensajes (historial)
+                    // Se espera 1 campo: [chat]
+                    if (fields.size() < 1) return;
+                    std::string chatPartner = Protocol::bytesToString(fields[0]);
+                    // Aquí se debe implementar la lógica para obtener y enviar el historial de mensajes.
+                    // Por ahora, se envía un stub o mensaje de error.
+                    std::vector<uint8_t> errorMsg = { 50, 0 }; // Error 0 puede significar "no implementado"
+                    sendMessage(wsi, errorMsg);
+                    break;
+                }
+
+                default:
+                std::cerr << "[ERROR] Código de mensaje no reconocido: " << static_cast<int>(code) << std::endl;
+                break;
+                }
 }
+
+
 
 bool Server::registerUser(const std::string& username, std::shared_ptr<User> user) {
     std::lock_guard<std::mutex> lock(usersMutex_);
@@ -244,4 +292,9 @@ void Server::sendUserList(struct lws *wsi) {
     
     auto response = Protocol::serializeMessage(5, userList);
     sendMessage(wsi, response);
+}
+
+bool Server::isUserOnline(const std::string& username) {
+    std::lock_guard<std::mutex> lock(usersMutex_);
+    return users_.find(username) != users_.end();
 }

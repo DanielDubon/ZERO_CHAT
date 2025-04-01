@@ -27,6 +27,8 @@ public:
     static int wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
                          void *user, void *in, size_t len);
 
+    bool isUserOnline(const std::string& username);
+
 private:
     int port_;
     bool running_;

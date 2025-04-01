@@ -16,7 +16,7 @@ Client::Client(const std::string& host, int port, const std::string& username)
     
     // Configurar los handlers antes de conectar
     ws_.onMessage([this](const std::string& msg) {
-        handleIncomingMessage(msg);  // Nueva función para procesar mensajes
+        handleIncomingMessage(msg);
     });
 
     ws_.onConnect([this]() {
@@ -39,7 +39,7 @@ Client::Client(const std::string& host, int port, const std::string& username)
     int retries = 3;
     bool connected = false;
     while (retries-- > 0 && !connected) {
-        connected = ws_.connect(host, port);
+        connected = ws_.connect(host, port, "/?name=" + username);
         if (!connected) {
             std::cout << "Reintentando conexión..." << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // 1 segundo
@@ -54,28 +54,28 @@ Client::~Client() {
 
 // Enviar un mensaje al servidor
 void Client::sendMessage(const std::string& recipient, const std::string& message) {
-    uint8_t messageType;
+    // Usaremos siempre el código 4 para "Mandar un mensaje"
+    uint8_t messageType = 4;
     std::vector<std::string> fields;
-
-    if (recipient == "all") {
-        messageType = 4;  // BROADCAST_MESSAGE
-        fields = {"all", message};
-        std::cout << "Mensaje enviado a todos: " << message << std::endl;
-        
-        // Añadir el mensaje al almacén local para mostrarlo en la UI
-        Message msg(username_, "all", message);
+    
+    if (recipient == "~") {
+        // Para chat general, el destino debe ser "~"
+        fields = {"~", message};
+        std::cout << "Mensaje broadcast enviado: " << message << std::endl;
+        // Almacenar localmente el mensaje usando "~" como receptor
+        Message msg(username_, "~", message);
         addMessage(msg);
     } else {
-        messageType = 54;  // PRIVATE_MESSAGE
-        fields = {username_, recipient, message};
+        // Para mensaje privado, el primer campo es el destinatario
+        fields = {recipient, message};
         std::cout << "Mensaje privado enviado a " << recipient << ": " << message << std::endl;
-        
-        // Añadir el mensaje al almacén local para mostrarlo en la UI
         Message msg(username_, recipient, message);
         addMessage(msg);
     }
 
-    ws_.send(Protocol::bytesToString(Protocol::serializeMessage(messageType, fields)));
+    // Serializar y enviar el mensaje
+    std::string serialized = Protocol::bytesToString(Protocol::serializeMessage(messageType, fields));
+    ws_.send(serialized);
 }
 
 // Establecer el estado del usuario
@@ -84,7 +84,7 @@ void Client::setStatus(const std::string& newStatus) {
     std::cout << "Estado actualizado a: " << status_ << std::endl;
 
     std::vector<std::string> fields = {username_, newStatus};
-    auto msg = Protocol::serializeMessage(7, fields);
+    auto msg = Protocol::serializeMessage(3, fields);
     ws_.send(Protocol::bytesToString(msg));
 }
 
@@ -117,109 +117,115 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
     }
 
     switch (code) {
-        case 3: // SERVER_WELCOME
-            if (!fields.empty()) {
-                std::cout << "\n¡Bienvenido al chat! Tu nombre de usuario es: " 
-                         << Protocol::bytesToString(fields[0]) << std::endl;
-            }
-            break;
-
-        case 4: // SERVER_MESSAGE (Broadcast)
-            if (fields.size() >= 2) {
-                std::string sender = Protocol::bytesToString(fields[0]);
-                std::string content = Protocol::bytesToString(fields[1]);
-                std::cout << "\n[" << sender << "]: " << content << std::endl;
-                
-                // Añadir el mensaje al almacén como broadcast
-                Message msg(sender, "all", content);
-                // Verificar que el tipo sea correcto
-                std::cout << "Tipo de mensaje recibido: " << msg.getType() << std::endl;
-                addMessage(msg);
-                
-                displayPrompt();  // Volver a mostrar el prompt después del mensaje
-            }
-            break;
-
-        case 51: // SERVER_LIST
-            {
-                std::cout << "\nUsuarios conectados:\n";
-                
-                // Actualizar la lista de usuarios conectados
-                std::lock_guard<std::mutex> lock(usersMutex_);
-                connectedUsers_.clear();
-                
-                for (const auto& field : fields) {
-                    std::string username = Protocol::bytesToString(field);
-                    std::cout << "- " << username;
-                    if (username == username_) {
-                        std::cout << " (tú)";
-                        // Añadir el usuario actual con su estado
-                        connectedUsers_.push_back({username, status_});
-                    } else {
-                        // Añadir otros usuarios con estado desconocido
-                        connectedUsers_.push_back({username, "ACTIVO"});
-                    }
-                    std::cout << std::endl;
-                }
-                displayPrompt();
-            }
-            break;
-
-        case 5: // SERVER_LIST_RESPONSE
-            {
-                std::cout << "\nUsuarios conectados:\n";
-                
-                // Actualizar la lista de usuarios conectados
-                std::lock_guard<std::mutex> lock(usersMutex_);
-                connectedUsers_.clear();
-                
-                for (size_t i = 0; i + 1 < fields.size(); i += 2) {
-                    std::string username = Protocol::bytesToString(fields[i]);
-                    std::string status   = Protocol::bytesToString(fields[i + 1]);
-            
-                    std::cout << "- " << username << " estado: " << status;
-                    if (username == username_) {
-                        this->status_ = status;
-                        std::cout << " (tú)";
-                    }
-                    std::cout << std::endl;
-            
-                    // Almacenar en connectedUsers_
-                    connectedUsers_.push_back({username, status});
-                }
-            
-                displayPrompt();
-            }
-            break;
-
-        case 6: // SERVER_ERROR
+        case 50: { // SERVER_ERROR
             if (!fields.empty()) {
                 std::cout << "\nError del servidor: " 
-                         << Protocol::bytesToString(fields[0]) << std::endl;
+                          << Protocol::bytesToString(fields[0]) << std::endl;
             }
-            displayPrompt();
             break;
-
-        case 55: // PRIVATE_MESSAGE
+        }
+        case 51: { // Respuesta a: Listar usuarios registrados
+            std::cout << "\nUsuarios conectados:\n";
+            {
+                std::lock_guard<std::mutex> lock(usersMutex_);
+                connectedUsers_.clear();
+                // Se esperan pares: [username, status]
+                for (size_t i = 0; i + 1 < fields.size(); i += 2) {
+                    std::string uname = Protocol::bytesToString(fields[i]);
+                    std::string status = Protocol::bytesToString(fields[i + 1]);
+                    connectedUsers_.push_back({uname, status});
+                    std::cout << "- " << uname << " estado: " << status;
+                    if (uname == username_) {
+                        std::cout << " (tú)";
+                        this->status_ = status;
+                    }
+                    std::cout << std::endl;
+                }
+            }
+            break;
+        }
+        case 52: { // Respuesta a: Obtener un usuario por su nombre
             if (fields.size() >= 2) {
-                std::string sender = Protocol::bytesToString(fields[0]);
-                std::string content = Protocol::bytesToString(fields[1]);
-                std::cout << "\n[Mensaje Privado de " << sender << "]: " << content << std::endl;
-                
-                // Añadir el mensaje al almacén como privado
-                Message msg(sender, username_, content);
-                addMessage(msg);
-                
-                displayPrompt();
+                std::string uname = Protocol::bytesToString(fields[0]);
+                std::string status = Protocol::bytesToString(fields[1]);
+                std::cout << "\nInformación de usuario: " << uname 
+                          << " estado: " << status << std::endl;
             }
             break;
-
+        }
+        case 53: { // Usuario se acaba de registrar (broadcast)
+            if (fields.size() >= 2) {
+                std::string uname = Protocol::bytesToString(fields[0]);
+                std::string status = Protocol::bytesToString(fields[1]);
+                std::cout << "\nNuevo usuario registrado: " << uname 
+                          << " (" << status << ")" << std::endl;
+                {
+                    std::lock_guard<std::mutex> lock(usersMutex_);
+                    // Agregar a la lista local si no existe
+                    bool found = false;
+                    for (const auto &u : connectedUsers_) {
+                        if (u.first == uname) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        connectedUsers_.push_back({uname, status});
+                    }
+                }
+            }
+            break;
+        }
+        case 54: { // Usuario cambió estatus (broadcast)
+            if (fields.size() >= 2) {
+                std::string uname = Protocol::bytesToString(fields[0]);
+                std::string newStatus = Protocol::bytesToString(fields[1]);
+                std::cout << "\nEl usuario " << uname 
+                          << " cambió su estatus a: " << newStatus << std::endl;
+                {
+                    std::lock_guard<std::mutex> lock(usersMutex_);
+                    for (auto &u : connectedUsers_) {
+                        if (u.first == uname) {
+                            u.second = newStatus;
+                            break;
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        case 55: { // Recibió mensaje (broadcast o privado)
+            if (fields.size() >= 2) {
+                std::string origen = Protocol::bytesToString(fields[0]);
+                std::string contenido = Protocol::bytesToString(fields[1]);
+                std::cout << "\n[" << origen << "]: " << contenido << std::endl;
+                // Crear el mensaje; si se trata de un mensaje broadcast, se asigna "~" como receptor.
+                std::string receptor = (origen == username_) ? "~" : origen; // Opcional, según tu lógica
+                Message msg(origen, receptor, contenido);
+                addMessage(msg);
+            }
+            break;
+        }
+        case 56: { // Respuesta a: Obtener historial de mensajes
+            if (!fields.empty()) {
+                // Se espera que el primer campo sea el número de mensajes (en formato numérico)
+                int numMensajes = std::stoi(Protocol::bytesToString(fields[0]));
+                std::cout << "\nHistorial de mensajes (" << numMensajes << " mensajes):\n";
+                for (size_t i = 1; i + 1 < fields.size(); i += 2) {
+                    std::string uname = Protocol::bytesToString(fields[i]);
+                    std::string contenido = Protocol::bytesToString(fields[i + 1]);
+                    std::cout << "[" << uname << "]: " << contenido << std::endl;
+                }
+            }
+            break;
+        }
         default:
             std::cout << "\nMensaje desconocido recibido (código " << (int)code << ")\n";
-            displayPrompt();
             break;
     }
+    displayPrompt();
 }
+
 
 // Añadir esta función auxiliar
 void Client::displayPrompt() const {
