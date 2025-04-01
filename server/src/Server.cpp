@@ -290,7 +290,7 @@ void Server::sendUserList(struct lws *wsi) {
         userList.push_back(kv.second->getStatus());     
     }
     
-    auto response = Protocol::serializeMessage(5, userList);
+    auto response = Protocol::serializeMessage(51, userList);
     sendMessage(wsi, response);
 }
 
