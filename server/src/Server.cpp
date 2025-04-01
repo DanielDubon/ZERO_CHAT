@@ -71,6 +71,7 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
             session->server = server;
         
             if (!session->username.empty()) {
+                std::lock_guard<std::mutex> lock(server->usersMutex_);
                 // Crea el objeto User y márcalo como ACTIVO
                 auto userObj = std::make_shared<User>(session->username, "127.0.0.1");
                 userObj->setStatus("ACTIVO");
@@ -78,6 +79,18 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
                 server->connections_[session->username] = wsi;
         
                 std::cout << "[LOG] Usuario " << session->username << " conectado." << std::endl;
+
+                // Primero aseguramos que el usuario actual reciba la lista completa
+                server->sendUserList(wsi);
+                
+                // Luego notificamos a los demás usuarios sobre el nuevo usuario
+                std::vector<std::string> newUserFields = { session->username, "ACTIVO" };
+                auto newUserNotification = Protocol::serializeMessage(53, newUserFields); // Código 53 para nuevo usuario
+                for (const auto& conn : server->connections_) {
+                    if (conn.second != wsi) { // No enviamos al usuario que se acaba de conectar
+                        server->sendMessage(conn.second, newUserNotification);
+                    }
+                }
             }
             break;
         }
