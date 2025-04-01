@@ -211,32 +211,34 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
         case 4: { // Mandar un mensaje
             // Se esperan 2 campos: [destino, mensaje]
             if (fields.size() < 2) return;
-                std::string dest = Protocol::bytesToString(fields[0]);
-                std::string content = Protocol::bytesToString(fields[1]);
-                std::cout << session->username << " -> " << dest << ": " << content << std::endl;
-
-            // Preparar respuesta con código 55: [origen, mensaje]
+            std::string dest = Protocol::bytesToString(fields[0]);
+            std::string content = Protocol::bytesToString(fields[1]);
+            std::cout << session->username << " -> " << dest << ": " << content << std::endl;
+        
+            if (dest == "~") { // Chat general (broadcast)
+                // Enviar con 2 campos: [origen, mensaje]
                 std::vector<std::string> responseFields = { session->username, content };
                 auto response = Protocol::serializeMessage(55, responseFields);
-
-                if (dest == "~") { // Chat general
                 for (auto &conn : connections_) {
-                sendMessage(conn.second, response);
+                    sendMessage(conn.second, response);
                 }
-                } else { // Mensaje directo
+            } else { // Mensaje privado
                 auto it = connections_.find(dest);
                 if (it != connections_.end()) {
-                sendMessage(it->second, response);
-                // Opcional: reenviar copia al emisor
-                sendMessage(wsi, response);
+                    // Enviar con 3 campos: [origen, destinatario, mensaje]
+                    std::vector<std::string> responseFields = { session->username, dest, content };
+                    auto response = Protocol::serializeMessage(55, responseFields);
+                    sendMessage(it->second, response);
+                    // Opcional: reenviar copia al emisor
+                    sendMessage(wsi, response);
                 } else {
-                // Error: destinatario desconectado (código 50 con error 4)
-                std::vector<uint8_t> errorMsg = { 50, 4 };
-                sendMessage(wsi, errorMsg);
+                    // Error: destinatario desconectado (código 50 con error 4)
+                    std::vector<uint8_t> errorMsg = { 50, 4 };
+                    sendMessage(wsi, errorMsg);
                 }
-                }
-                break;
-                }
+            }
+            break;
+        }
 
                 case 5: { // Obtener Mensajes (historial)
                     // Se espera 1 campo: [chat]

@@ -195,16 +195,26 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
         }
         case 55: { // Recibió mensaje (broadcast o privado)
             if (fields.size() >= 2) {
-                std::string origen = Protocol::bytesToString(fields[0]);
-                std::string contenido = Protocol::bytesToString(fields[1]);
-                std::cout << "\n[" << origen << "]: " << contenido << std::endl;
-                
-                // Para este ejemplo, asumimos que los mensajes recibidos con código 55 son broadcast.
-                Message msg(origen, "~", contenido);
-                addMessage(msg);
+                if (fields.size() >= 3) {
+                    // Mensaje privado: [origen, destinatario, contenido]
+                    std::string origen    = Protocol::bytesToString(fields[0]);
+                    std::string destino   = Protocol::bytesToString(fields[1]);
+                    std::string contenido = Protocol::bytesToString(fields[2]);
+                    std::cout << "\n[Mensaje Privado] " << origen << " -> " << destino << ": " << contenido << std::endl;
+                    Message msg(origen, destino, contenido);
+                    addMessage(msg);
+                } else {
+                    // Mensaje broadcast: [origen, contenido]
+                    std::string origen    = Protocol::bytesToString(fields[0]);
+                    std::string contenido = Protocol::bytesToString(fields[1]);
+                    std::cout << "\n[Mensaje Broadcast] " << origen << ": " << contenido << std::endl;
+                    Message msg(origen, "~", contenido);
+                    addMessage(msg);
+                }
             }
             break;
         }
+        
         case 56: { // Respuesta a: Obtener historial de mensajes
             if (!fields.empty()) {
                 // Se espera que el primer campo sea el número de mensajes (en formato numérico)
