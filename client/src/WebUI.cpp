@@ -964,7 +964,7 @@ void WebUI::handleGetMessages(const httplib::Request& req, httplib::Response& re
     
     for (const auto& msg : clientMessages) {
         // Determinar el tipo de mensaje basado en el destinatario
-        std::string type = (msg.getReceiver() == "all") ? "broadcast" : "private";
+        std::string type = (msg.getReceiver() == "~") ? "broadcast" : "private";
         
         json message = {
             {"sender", msg.getSender()},

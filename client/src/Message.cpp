@@ -7,11 +7,14 @@
 Message::Message() : timestamp_(std::time(nullptr)), type_("broadcast") {}
 
 Message::Message(const std::string& sender, const std::string& receiver, const std::string& content)
-    : sender_(sender), receiver_(receiver), content_(content), timestamp_(std::time(nullptr)) {
-    // Determinar el tipo de mensaje basado en el destinatario
-    type_ = (receiver == "~") ? "broadcast" : "private";
-    
-    // Depuración
+    : sender_(sender), receiver_(receiver), content_(content), timestamp_(std::time(nullptr))
+{
+    // Si el receptor es "~", el mensaje es broadcast, sino es privado.
+    if (receiver == "~") {
+        type_ = "broadcast";
+    } else {
+        type_ = "private";
+    }
     std::cout << "Creando mensaje: " << sender << " -> " << receiver 
               << " (" << type_ << "): " << content << std::endl;
 }
