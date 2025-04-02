@@ -104,8 +104,14 @@ void Client::setStatus(const std::string& newStatus) {
 
 // Listar usuarios conectados
 void Client::listConnectedUsers() {
-    // Enviar solicitud al servidor para obtener la lista de usuarios
-    ws_.send(Protocol::bytesToString(Protocol::serializeMessage(static_cast<uint8_t>(2), std::vector<std::string>{})));
+    // Cambiar el código 2 por 1 para solicitar la lista de usuarios
+    std::vector<std::string> fields;  // No necesitamos campos
+    auto msg = Protocol::serializeMessage(1, fields);
+    if (!ws_.send(Protocol::bytesToString(msg))) {
+        std::cerr << "Error al solicitar lista de usuarios\n";
+    } else {
+        std::cout << "Solicitud de lista de usuarios enviada\n";
+    }
 }
 
 // Verificar si está conectado
@@ -137,27 +143,25 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
             }
             break;
         }
-        case 51: { // Respuesta a: Listar usuarios registrados
-            std::cout << "\nUsuarios conectados:\n";
+        case 51: { // SERVER_LIST (Lista de usuarios)
+            std::cout << "\nRecibida lista actualizada de usuarios\n";
             {
                 std::lock_guard<std::mutex> lock(usersMutex_);
                 connectedUsers_.clear();
-                if(fields.empty()) break;
-
-                int numUsuarios = static_cast<int>(fields[0][0]);
-
-                // Se esperan pares: [username, status]
-                for (size_t i = 1; i + 1 < fields.size(); i += 2) {
-                    std::string uname = Protocol::bytesToString(fields[i]);
+                
+                // Procesar todos los campos recibidos
+                for (size_t i = 1; i < fields.size(); i += 2) {
+                    std::string username = Protocol::bytesToString(fields[i]);
                     std::string status = Protocol::bytesToString(fields[i + 1]);
-                    connectedUsers_.push_back({uname, status});
-                    std::cout << "- " << uname << " estado: " << status;
-                    if (uname == username_) {
-                        std::cout << " (tú)";
-                        this->status_ = status;
-                    }
-                    std::cout << std::endl;
+                    connectedUsers_.push_back({username, status});
+                    std::cout << "Usuario en lista: " << username << " (" << status << ")\n";
                 }
+            }
+            
+            // Llamar al callback para actualizar la UI inmediatamente
+            if (updateUserListCallback_) {
+                std::cout << "Llamando al callback de actualización de usuarios\n";
+                updateUserListCallback_();
             }
             break;
         }
@@ -170,29 +174,18 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
             }
             break;
         }
-        case 53: { // Usuario se acaba de registrar
+        case 53: { // Nuevo usuario conectado
             if (fields.size() >= 2) {
                 std::string newUser = Protocol::bytesToString(fields[0]);
                 std::string newStatus = Protocol::bytesToString(fields[1]);
-                {
-                    std::lock_guard<std::mutex> lock(usersMutex_);
-                    bool exists = false;
-                    for (auto &u : connectedUsers_) {
-                        if (u.first == newUser) {
-                            exists = true;
-                            break;
-                        }
-                    }
-                    if (!exists) {
-                        connectedUsers_.push_back({newUser, newStatus});
-                    }
-                }
-                if (updateUserListCallback_)
-                {
+                std::cout << "\nNuevo usuario conectado: " << newUser << "\n";
+                
+                // Solicitar lista actualizada inmediatamente
+                listConnectedUsers();
+                
+                if (updateUserListCallback_) {
                     updateUserListCallback_();
                 }
-                
-               
             }
             break;
         }
@@ -223,19 +216,33 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
             if (fields.size() >= 2) {
                 if (fields.size() >= 3) {
                     // Mensaje privado: [origen, destinatario, contenido]
-                    std::string origen    = Protocol::bytesToString(fields[0]);
-                    std::string destino   = Protocol::bytesToString(fields[1]);
+                    std::string origen = Protocol::bytesToString(fields[0]);
+                    std::string destino = Protocol::bytesToString(fields[1]);
                     std::string contenido = Protocol::bytesToString(fields[2]);
                     std::cout << "\n[Mensaje Privado] " << origen << " -> " << destino << ": " << contenido << std::endl;
+                    
+                    // Crear y almacenar el mensaje
                     Message msg(origen, destino, contenido);
                     addMessage(msg);
+                    
+                    // Forzar actualización de la UI
+                    if (updateUserListCallback_) {
+                        updateUserListCallback_();
+                    }
                 } else {
                     // Mensaje broadcast: [origen, contenido]
-                    std::string origen    = Protocol::bytesToString(fields[0]);
+                    std::string origen = Protocol::bytesToString(fields[0]);
                     std::string contenido = Protocol::bytesToString(fields[1]);
                     std::cout << "\n[Mensaje Broadcast] " << origen << ": " << contenido << std::endl;
+                    
+                    // Crear y almacenar el mensaje
                     Message msg(origen, "~", contenido);
                     addMessage(msg);
+                    
+                    // Forzar actualización de la UI
+                    if (updateUserListCallback_) {
+                        updateUserListCallback_();
+                    }
                 }
             }
             break;

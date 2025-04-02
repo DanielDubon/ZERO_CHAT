@@ -40,7 +40,7 @@ int main() {
 
         // 3. Enviar mensaje privado a sí mismo
         std::string privateMsg = "Mensaje privado " + std::to_string(counter);
-        bot.sendMessage("Daniel", privateMsg);
+        bot.sendMessage("Bianca", privateMsg);
         std::cout << "[DEBUG] Enviado mensaje privado: " << privateMsg << std::endl;
 
         counter++;

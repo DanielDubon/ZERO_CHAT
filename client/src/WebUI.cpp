@@ -338,23 +338,24 @@ function loadMessages() {
                 
                 // Añadir todos los mensajes
                 data.messages.forEach(message => {
-                    // Forzar el tipo de mensaje basado en el contenido
-                    if (message.content.startsWith('Broadcast mensaje')) {
-                        message.type = 'broadcast';
-                    }
-                    
                     const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
                     if (!messageIds.has(messageId)) {
                         messageIds.add(messageId);
                         const isOutgoing = message.sender === username;
+                        
+                        // Determinar el tipo de mensaje
+                        if (message.receiver === "~") {
+                            message.type = 'broadcast';
+                        } else {
+                            message.type = 'private';
+                        }
+                        
                         outputMessage(message, isOutgoing);
                     }
                 });
                 
                 // Scroll hacia abajo
                 chatMessages.scrollTop = chatMessages.scrollHeight;
-            } else {
-                console.log('No hay nuevos mensajes para mostrar');
             }
         })
         .catch(error => console.error('Error cargando mensajes:', error));
@@ -380,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadMessages();
     
     // Configurar polling para actualizaciones
-    setInterval(checkUpdates, 1000);
+    setInterval(checkUpdates, 100);
     
     // Event listeners
     chatForm.addEventListener('submit', e => {
@@ -446,10 +447,17 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Funciones
     function loadUsers() {
+        console.log("Solicitando lista de usuarios...");
         fetch('/api/users')
             .then(response => response.json())
             .then(data => {
                 console.log("Usuarios recibidos:", data.users);
+                
+                const usersList = document.getElementById('users');
+                if (!usersList) {
+                    console.error("No se encontró el elemento con id 'users'");
+                    return;
+                }
                 
                 // Limpiar la lista de usuarios
                 usersList.innerHTML = '';
@@ -457,11 +465,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Actualizar el selector de destinatarios
                 recipientSelector.innerHTML = '<option value="all">Todos</option>';
                 
-                // Variable para verificar si el destinatario seleccionado sigue disponible
-                let recipientStillExists = selectedRecipient === 'all';
-                
                 // Añadir cada usuario a la lista y al selector
                 data.users.forEach(user => {
+                    console.log("Agregando usuario a la lista:", user.username);
+                    
                     // Añadir a la lista de usuarios
                     const li = document.createElement('li');
                     li.innerHTML = `
@@ -478,25 +485,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         const option = document.createElement('option');
                         option.value = user.username;
                         option.textContent = user.username;
-                        
-                        // Verificar si este es el destinatario seleccionado
-                        if (user.username === selectedRecipient) {
-                            recipientStillExists = true;
-                        }
-                        
                         recipientSelector.appendChild(option);
                     }
                 });
-                
-                // Restaurar la selección o cambiar a 'all' si el destinatario ya no existe
-                if (recipientStillExists) {
-                    recipientSelector.value = selectedRecipient;
-                } else {
-                    recipientSelector.value = 'all';
-                    selectedRecipient = 'all';
-                }
-                
-                console.log('Destinatario restaurado:', recipientSelector.value);
             })
             .catch(error => console.error('Error cargando usuarios:', error));
     }
@@ -527,28 +518,9 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.type === 'update') {
-                    // Guardar la selección actual
-                    const currentSelection = recipientSelector.value;
-                    
-                    // Solo actualizar usuarios, no mensajes
+                    console.log('Actualizando lista de usuarios...');
                     loadUsers();
-                    
-                    // Cargar mensajes solo si es necesario
-                    fetch('/api/messages')
-                        .then(response => response.json())
-                        .then(msgData => {
-                            if (msgData.messages.length > 0) {
-                                loadMessages();
-                            }
-                        });
-                    
-                    // Asegurarse de que la selección se mantenga después de un breve retraso
-                    setTimeout(() => {
-                        if (recipientSelector.value !== currentSelection) {
-                            recipientSelector.value = currentSelection;
-                            console.log('Selección restaurada después de actualización:', currentSelection);
-                        }
-                    }, 100);
+                    loadMessages();
                 }
             })
             .catch(error => console.error('Error en polling:', error));
@@ -567,9 +539,14 @@ document.addEventListener('DOMContentLoaded', function() {
         
         console.log('Clases añadidas:', div.className);
         
+        let senderText = message.sender;
+        if (message.type === 'private') {
+            senderText += ' → ' + message.receiver;
+        }
+        
         div.innerHTML = `
             <div class="meta">
-                <span class="sender">${message.sender}</span>
+                <span class="sender">${senderText}</span>
                 <span class="time">${message.timestamp}</span>
             </div>
             <p class="text">${message.content}</p>
@@ -693,7 +670,7 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
         loadMessages();
         
         // Configurar polling para actualizaciones
-        setInterval(checkUpdates, 1000);
+        setInterval(checkUpdates, 100);
         
         // Event listeners
         chatForm.addEventListener('submit', e => {
@@ -759,10 +736,17 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
         
         // Funciones
         function loadUsers() {
+            console.log("Solicitando lista de usuarios...");
             fetch('/api/users')
                 .then(response => response.json())
                 .then(data => {
                     console.log("Usuarios recibidos:", data.users);
+                    
+                    const usersList = document.getElementById('users');
+                    if (!usersList) {
+                        console.error("No se encontró el elemento con id 'users'");
+                        return;
+                    }
                     
                     // Limpiar la lista de usuarios
                     usersList.innerHTML = '';
@@ -770,11 +754,10 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                     // Actualizar el selector de destinatarios
                     recipientSelector.innerHTML = '<option value="all">Todos</option>';
                     
-                    // Variable para verificar si el destinatario seleccionado sigue disponible
-                    let recipientStillExists = selectedRecipient === 'all';
-                    
                     // Añadir cada usuario a la lista y al selector
                     data.users.forEach(user => {
+                        console.log("Agregando usuario a la lista:", user.username);
+                        
                         // Añadir a la lista de usuarios
                         const li = document.createElement('li');
                         li.innerHTML = `
@@ -791,25 +774,9 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                             const option = document.createElement('option');
                             option.value = user.username;
                             option.textContent = user.username;
-                            
-                            // Verificar si este es el destinatario seleccionado
-                            if (user.username === selectedRecipient) {
-                                recipientStillExists = true;
-                            }
-                            
                             recipientSelector.appendChild(option);
                         }
                     });
-                    
-                    // Restaurar la selección o cambiar a 'all' si el destinatario ya no existe
-                    if (recipientStillExists) {
-                        recipientSelector.value = selectedRecipient;
-                    } else {
-                        recipientSelector.value = 'all';
-                        selectedRecipient = 'all';
-                    }
-                    
-                    console.log('Destinatario restaurado:', recipientSelector.value);
                 })
                 .catch(error => console.error('Error cargando usuarios:', error));
         }
@@ -840,28 +807,9 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 .then(response => response.json())
                 .then(data => {
                     if (data.type === 'update') {
-                        // Guardar la selección actual
-                        const currentSelection = recipientSelector.value;
-                        
-                        // Solo actualizar usuarios, no mensajes
+                        console.log('Actualizando lista de usuarios...');
                         loadUsers();
-                        
-                        // Cargar mensajes solo si es necesario
-                        fetch('/api/messages')
-                            .then(response => response.json())
-                            .then(msgData => {
-                                if (msgData.messages.length > 0) {
-                                    loadMessages();
-                                }
-                            });
-                        
-                        // Asegurarse de que la selección se mantenga después de un breve retraso
-                        setTimeout(() => {
-                            if (recipientSelector.value !== currentSelection) {
-                                recipientSelector.value = currentSelection;
-                                console.log('Selección restaurada después de actualización:', currentSelection);
-                            }
-                        }, 100);
+                        loadMessages();
                     }
                 })
                 .catch(error => console.error('Error en polling:', error));
@@ -881,15 +829,18 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                         
                         // Añadir todos los mensajes
                         data.messages.forEach(message => {
-                            // Forzar el tipo de mensaje basado en el contenido
-                            if (message.content.startsWith('Broadcast mensaje')) {
-                                message.type = 'broadcast';
-                            }
-                            
                             const messageId = message.timestamp + '-' + message.sender + '-' + message.content;
                             if (!messageIds.has(messageId)) {
                                 messageIds.add(messageId);
                                 const isOutgoing = message.sender === username;
+                                
+                                // Determinar el tipo de mensaje
+                                if (message.receiver === "~") {
+                                    message.type = 'broadcast';
+                                } else {
+                                    message.type = 'private';
+                                }
+                                
                                 outputMessage(message, isOutgoing);
                             }
                         });
@@ -916,9 +867,14 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
             
             console.log('Clases añadidas:', div.className);
             
+            let senderText = message.sender;
+            if (message.type === 'private') {
+                senderText += ' → ' + message.receiver;
+            }
+            
             div.innerHTML = `
                 <div class="meta">
-                    <span class="sender">${message.sender}</span>
+                    <span class="sender">${senderText}</span>
                     <span class="time">${message.timestamp}</span>
                 </div>
                 <p class="text">${message.content}</p>
@@ -955,12 +911,7 @@ void WebUI::handleGetMessages(const httplib::Request& req, httplib::Response& re
     // Obtener los mensajes del cliente
     auto clientMessages = client_->getMessages();
     
-    // Imprimir información de depuración
     std::cout << "Número de mensajes del cliente: " << clientMessages.size() << std::endl;
-    
-    if (clientMessages.empty()) {
-        std::cout << "No hay mensajes para mostrar" << std::endl;
-    }
     
     for (const auto& msg : clientMessages) {
         // Determinar el tipo de mensaje basado en el destinatario
@@ -968,15 +919,15 @@ void WebUI::handleGetMessages(const httplib::Request& req, httplib::Response& re
         
         json message = {
             {"sender", msg.getSender()},
+            {"receiver", msg.getReceiver()},
             {"content", msg.getContent()},
             {"timestamp", msg.getTimestamp()},
-            {"type", type}  // Usar el tipo determinado aquí
+            {"type", type}
         };
         messages.push_back(message);
         
-        // Imprimir información de depuración
-        std::cout << "Mensaje: " << msg.getSender() << " -> " << msg.getReceiver() 
-                  << " (tipo: " << type << ", original: " << msg.getType() << "): " 
+        std::cout << "Mensaje procesado: " << msg.getSender() << " -> " 
+                  << msg.getReceiver() << " (" << type << "): " 
                   << msg.getContent() << std::endl;
     }
     
@@ -986,9 +937,6 @@ void WebUI::handleGetMessages(const httplib::Request& req, httplib::Response& re
     };
     
     res.set_content(response.dump(), "application/json");
-    
-    // Imprimir información de depuración
-    std::cout << "Respuesta JSON: " << response.dump() << std::endl;
 }
 
 void WebUI::handlePostMessage(const httplib::Request& req, httplib::Response& res) {
@@ -1071,10 +1019,7 @@ void WebUI::handlePostStatus(const httplib::Request& req, httplib::Response& res
 }
 
 void WebUI::handleWebSocket(const httplib::Request& req, httplib::Response& res) {
-    // Esta función simula actualizaciones para el polling
-    // En una implementación real, usarías WebSockets para notificaciones en tiempo real
-    
-    // Responder con una actualización simulada
+    // Forzar actualización de mensajes y usuarios
     json response = {
         {"type", "update"},
         {"timestamp", std::time(nullptr)}
