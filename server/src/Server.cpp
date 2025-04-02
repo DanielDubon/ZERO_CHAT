@@ -212,6 +212,11 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
             // nameBuffer contiene el valor después de 'name='
             std::string candidateName(nameBuffer);
 
+            // Obtén el valor de HOME
+            std::string homeDir;
+            if (const char* envHome = std::getenv("HOME"))
+                homeDir = envHome;
+
             // Si candidateName empieza con "name=", removerla
             const std::string prefix = "name=";
             if (candidateName.compare(0, prefix.size(), prefix) == 0) {
@@ -219,8 +224,8 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
             }
             
             // Validaciones del protocolo
-            if (candidateName.empty() || candidateName == "~") {
-                std::cerr << "[ERROR] Nombre vacío o '~' no permitido." << std::endl;
+            if (candidateName.empty() || candidateName == "~" || candidateName == homeDir) {
+                std::cerr << "[ERROR] El nombre de usuario no puede ser '~'." << std::endl;
                 return 1; // Rechaza la conexión
             }
 
