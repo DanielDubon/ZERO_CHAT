@@ -79,10 +79,24 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
 
 // Establecer el estado del usuario
 void Client::setStatus(const std::string& newStatus) {
-    status_ = newStatus;
+    std::string statusNumStr;
+    if(newStatus == "ACTIVO")
+        statusNumStr = "1";
+    else if(newStatus == "OCUPADO")
+        statusNumStr = "2";
+    else if(newStatus == "INACTIVO")
+        statusNumStr = "3";
+    else if(newStatus == "DISCONNECTED")
+        statusNumStr = "0";
+    else {
+        std::cerr << "Estado inválido: " << newStatus << std::endl;
+        return;
+    }
+
+    status_ = newStatus; // Guarda el estado en formato texto para la UI
     std::cout << "Estado actualizado a: " << status_ << std::endl;
 
-    std::vector<std::string> fields = {username_, newStatus};
+    std::vector<std::string> fields = {username_, statusNumStr };
     auto msg = Protocol::serializeMessage(3, fields);
     ws_.send(Protocol::bytesToString(msg));
 }
@@ -128,8 +142,12 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
             {
                 std::lock_guard<std::mutex> lock(usersMutex_);
                 connectedUsers_.clear();
+                if(fields.empty()) break;
+
+                int numUsuarios = static_cast<int>(fields[0][0]);
+
                 // Se esperan pares: [username, status]
-                for (size_t i = 0; i + 1 < fields.size(); i += 2) {
+                for (size_t i = 1; i + 1 < fields.size(); i += 2) {
                     std::string uname = Protocol::bytesToString(fields[i]);
                     std::string status = Protocol::bytesToString(fields[i + 1]);
                     connectedUsers_.push_back({uname, status});
@@ -169,6 +187,11 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                         connectedUsers_.push_back({newUser, newStatus});
                     }
                 }
+                if (updateUserListCallback_)
+                {
+                    updateUserListCallback_();
+                }
+                
                
             }
             break;
@@ -187,6 +210,10 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
                             break;
                         }
                     }
+                }
+                if (updateUserListCallback_)
+                {
+                    updateUserListCallback_();
                 }
                 
             }

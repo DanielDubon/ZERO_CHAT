@@ -6,6 +6,9 @@
 
 ChatUI::ChatUI(std::shared_ptr<Client> client)
     : client_(client), running_(false) {
+        client_->setUpdateUserListCallback([this]() {
+            this->refreshUserList();
+        });
 }
 
 void ChatUI::start() {
@@ -36,6 +39,15 @@ void ChatUI::showHelp() const {
               << "/help                    - Mostrar esta ayuda\n"
               << "/quit                    - Salir\n"
               << "========================\n\n";
+}
+
+void ChatUI::refreshUserList() {
+    auto users = client_->getConnectedUsers();
+    std::cout << "\n*** Lista Actualizada de Usuarios Conectados ***\n";
+    for (const auto& user : users) {
+        std::cout << "- " << user.first << " (" << user.second << ")\n";
+    }
+    std::cout << "**************************************************\n";
 }
 
 void ChatUI::processCommand(const std::string& input) {

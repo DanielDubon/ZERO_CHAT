@@ -12,6 +12,7 @@ public:
     void start();
     void stop();
     bool isRunning() const;
+    void refreshUserList();
 
 private:
     std::shared_ptr<Client> client_;

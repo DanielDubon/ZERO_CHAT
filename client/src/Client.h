@@ -7,6 +7,7 @@
 #include <iostream>
 #include <vector>
 #include <mutex>
+#include <functional>
 
 class Client {
 public:
@@ -20,6 +21,10 @@ public:
     void listConnectedUsers();  // Listar usuarios conectados
     bool isConnected() const;  // Verificar si está conectado
     void run();  // Añadir esta declaración
+
+    void setUpdateUserListCallback(const std::function<void()>& callback){
+        updateUserListCallback_ = callback;
+    }
 
     // Nuevo método para obtener mensajes
     std::vector<Message> getMessages();
@@ -44,6 +49,7 @@ private:
     void displayPrompt() const;
     
     WebSocket ws_;
+    std::function<void()> updateUserListCallback_;
     std::string username_;
     std::string status_;  // Estado del usuario
     std::string host_;    // Añadir estos
