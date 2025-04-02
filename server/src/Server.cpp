@@ -66,11 +66,13 @@ void Server::start() {
                     if (session && !session->username.empty()) {
                         auto idleTime = std::chrono::duration_cast<std::chrono::seconds>(now - session->lastActivity);
                         auto userIt = users_.find(session->username);
+                        /*
                         if (userIt != users_.end()) {
                             std::cout << "[DEBUG] " << session->username << " lleva " 
                                       << idleTime.count() << "s inactivo. Estado actual: " 
                                       << userIt->second->getStatus() << std::endl;
                         }
+                        */
                         // Si ha pasado más tiempo que el umbral para auto-inactividad
                         if (idleTime > autoInactiveThreshold) {
                             if (userIt != users_.end() && userIt->second->getStatus() != "INACTIVO") {
@@ -138,25 +140,41 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
             
             // Extraer el código (primer byte) y mostrarlo para depuración
             uint8_t code = *((uint8_t*)in);
+            /*
             std::cout << "[DEBUG RECEIVE] Código recibido: " << static_cast<int>(code)
                       << " (len: " << len << ")" << std::endl;
+            */
                 
-            // Supongamos que los mensajes de keep-alive tienen una longitud muy corta (por ejemplo, 1 byte)
-            // o bien, si conoces el código exacto (por ejemplo, 0 o 99) para pings, los descartas.
+            // Descartar los mensajes de keep-alive
             if (len < 2 || code == 0 || code == 99) {
                 // No consideramos esto como actividad real
                 break;
             }
 
+            // Actualizamos lastActivity solo si el mensaje es real
             if (code >= 1 && code <= 56) {
                 session->lastActivity = std::chrono::steady_clock::now();
             }
             
+            // Procesar el mensaje completo
             std::vector<uint8_t> data(static_cast<uint8_t*>(in),
                                       static_cast<uint8_t*>(in) + len);
             server->handleClientData(wsi, session, data);
-            if(auto it = server->users_.find(session->username); it != server->users_.end()){
+
+            // Actualizar lastActivity en el objeto User y verificar si debe cambiarse el estado
+            if (auto it = server->users_.find(session->username); it != server->users_.end()){
                 it->second->updateLastActivity();
+                if (it->second->getStatus() == "INACTIVO") {
+                    it->second->setStatus("ACTIVO");
+                    std::cout << "[LOG] El usuario " << session->username 
+                              << " ha vuelto a estar ACTIVO." << std::endl;
+                    // Notificar a todos los clientes del cambio de estado
+                    std::vector<std::string> responseFields = { session->username, "ACTIVO" };
+                    auto response = Protocol::serializeMessage(54, responseFields);
+                    for (auto &conn : server->connections_) {
+                        server->sendMessage(conn.second, response);
+                    }
+                }
             }
             break;
         }        
