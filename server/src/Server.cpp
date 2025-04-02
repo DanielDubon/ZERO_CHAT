@@ -45,8 +45,35 @@ void Server::start() {
     running_ = true;
     std::cout << "Servidor WebSocket iniciado en puerto " << port_ << std::endl;
 
+    // Define un umbral de inactividad (por ejemplo, 60 segundos)
+    const auto timeoutThreshold = std::chrono::seconds(60);
     while (running_) {
         lws_service(context_, 50);
+
+        // Verificar conexiones inactivas
+        auto now = std::chrono::steady_clock::now();
+        {
+            std::lock_guard<std::mutex> lock(usersMutex_);
+            // Iteramos sobre el mapa de conexiones
+            for (auto it = connections_.begin(); it != connections_.end();) {
+                lws* conn_wsi = it->second;
+                // Obtener el SessionData asociado usando lws_get_opaque_user_data
+                SessionData* session = static_cast<SessionData*>(lws_get_opaque_user_data(conn_wsi));
+                if (session) {
+                    auto idleTime = std::chrono::duration_cast<std::chrono::seconds>(now - session->lastActivity);
+                    if (idleTime > timeoutThreshold) {
+                        std::cout << "[LOG] Timeout para el usuario " << session->username
+                                  << " (" << idleTime.count() << " segundos de inactividad)" << std::endl;
+                        // Cierra la conexión
+                        lws_set_timeout(conn_wsi, PENDING_TIMEOUT_CLOSE_SEND, 10);
+                        // Remueve la conexión del mapa
+                        it = connections_.erase(it);
+                        continue;
+                    }
+                }
+                ++it;
+            }
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
@@ -69,6 +96,7 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
         case LWS_CALLBACK_ESTABLISHED: {
             std::cout << "Nueva conexión establecida" << std::endl;
             session->server = server;
+            session->lastActivity = std::chrono::steady_clock::now(); // Inicializa la actividad
         
             if (!session->username.empty()) {
                 // Crea el objeto User y márcalo como ACTIVO
@@ -84,6 +112,8 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
 
         case LWS_CALLBACK_RECEIVE: {
             if (!in || len == 0) return 0;
+            // Actualiza el timestamp de la última actividad
+            session->lastActivity = std::chrono::steady_clock::now();
 
             std::vector<uint8_t> data(static_cast<uint8_t*>(in),
                                     static_cast<uint8_t*>(in) + len);

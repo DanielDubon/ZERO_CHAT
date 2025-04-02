@@ -9,9 +9,10 @@
 #include "User.h"
 #include <libwebsockets.h>
 #include "Message.h"
+#include <chrono>
 
-// Forward declaration
-struct SessionData;
+
+
 
 class Server {
 public:
@@ -61,10 +62,12 @@ private:
     bool sendMessage(struct lws *wsi, const std::vector<uint8_t>& data);
 };
 
-// Definición de SessionData después de la clase Server
-struct SessionData {
+// Forward declaration
+struct SessionData{
     Server* server;
     std::string username;
+    std::chrono::steady_clock::time_point lastActivity; // Nuevo campo para la última actividad
+
 };
 
 #endif // SERVER_H
