@@ -29,6 +29,8 @@ Server::~Server() {
 void Server::start() {
     struct lws_context_creation_info info;
     memset(&info, 0, sizeof info);
+    // Umbral para cambiar automáticamente el estado a INACTIVO
+    const auto autoInactiveThreshold = std::chrono::seconds(20);
 
     info.port = port_;
     info.protocols = protocols;
@@ -52,28 +54,44 @@ void Server::start() {
 
         // Verificar conexiones inactivas
         auto now = std::chrono::steady_clock::now();
+
         {
-            std::lock_guard<std::mutex> lock(usersMutex_);
-            // Iteramos sobre el mapa de conexiones
-            for (auto it = connections_.begin(); it != connections_.end();) {
-                lws* conn_wsi = it->second;
-                // Obtener el SessionData asociado usando lws_get_opaque_user_data
-                SessionData* session = static_cast<SessionData*>(lws_get_opaque_user_data(conn_wsi));
-                if (session) {
-                    auto idleTime = std::chrono::duration_cast<std::chrono::seconds>(now - session->lastActivity);
-                    if (idleTime > timeoutThreshold) {
-                        std::cout << "[LOG] Timeout para el usuario " << session->username
-                                  << " (" << idleTime.count() << " segundos de inactividad)" << std::endl;
-                        // Cierra la conexión
-                        lws_set_timeout(conn_wsi, PENDING_TIMEOUT_CLOSE_SEND, 10);
-                        // Remueve la conexión del mapa
-                        it = connections_.erase(it);
-                        continue;
+            {
+                std::lock_guard<std::mutex> lock(usersMutex_);
+                // Iterar sobre las conexiones
+                for (auto it = connections_.begin(); it != connections_.end(); ++it) {
+                    lws* conn_wsi = it->second;
+                    // Obtener la información de la sesión asociada
+                    SessionData* session = static_cast<SessionData*>(lws_get_opaque_user_data(conn_wsi));
+                    if (session && !session->username.empty()) {
+                        auto idleTime = std::chrono::duration_cast<std::chrono::seconds>(now - session->lastActivity);
+                        auto userIt = users_.find(session->username);
+                        if (userIt != users_.end()) {
+                            std::cout << "[DEBUG] " << session->username << " lleva " 
+                                      << idleTime.count() << "s inactivo. Estado actual: " 
+                                      << userIt->second->getStatus() << std::endl;
+                        }
+                        // Si ha pasado más tiempo que el umbral para auto-inactividad
+                        if (idleTime > autoInactiveThreshold) {
+                            if (userIt != users_.end() && userIt->second->getStatus() != "INACTIVO") {
+                                userIt->second->setStatus("INACTIVO");
+                                std::cout << "[LOG] El usuario " << session->username 
+                                          << " ha estado inactivo por " << idleTime.count() 
+                                          << " s; se cambia a INACTIVO." << std::endl;
+                                std::vector<std::string> responseFields = { session->username, "INACTIVO" };
+                                auto response = Protocol::serializeMessage(54, responseFields);
+                                for (auto &conn : connections_) {
+                                    sendMessage(conn.second, response);
+                                }
+                            }
+                        }
+                    } else {
+                        std::cout << "[DEBUG] Usuario sin sesión válida: " << it->first << std::endl;
                     }
                 }
-                ++it;
-            }
+            }            
         }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
@@ -97,6 +115,8 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
             std::cout << "Nueva conexión establecida" << std::endl;
             session->server = server;
             session->lastActivity = std::chrono::steady_clock::now(); // Inicializa la actividad
+
+            lws_set_opaque_user_data(wsi, session);
         
             if (!session->username.empty()) {
                 // Crea el objeto User y márcalo como ACTIVO
@@ -113,14 +133,33 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
 
         case LWS_CALLBACK_RECEIVE: {
             if (!in || len == 0) return 0;
-            // Actualiza el timestamp de la última actividad
-            session->lastActivity = std::chrono::steady_clock::now();
+            
+            // Intentar extraer el código del mensaje (primer byte)
+            
+            // Extraer el código (primer byte) y mostrarlo para depuración
+            uint8_t code = *((uint8_t*)in);
+            std::cout << "[DEBUG RECEIVE] Código recibido: " << static_cast<int>(code)
+                      << " (len: " << len << ")" << std::endl;
+                
+            // Supongamos que los mensajes de keep-alive tienen una longitud muy corta (por ejemplo, 1 byte)
+            // o bien, si conoces el código exacto (por ejemplo, 0 o 99) para pings, los descartas.
+            if (len < 2 || code == 0 || code == 99) {
+                // No consideramos esto como actividad real
+                break;
+            }
 
+            if (code >= 1 && code <= 56) {
+                session->lastActivity = std::chrono::steady_clock::now();
+            }
+            
             std::vector<uint8_t> data(static_cast<uint8_t*>(in),
-                                    static_cast<uint8_t*>(in) + len);
+                                      static_cast<uint8_t*>(in) + len);
             server->handleClientData(wsi, session, data);
+            if(auto it = server->users_.find(session->username); it != server->users_.end()){
+                it->second->updateLastActivity();
+            }
             break;
-        }
+        }        
 
         case LWS_CALLBACK_CLOSED: {
             if (session && !session->username.empty()) {
