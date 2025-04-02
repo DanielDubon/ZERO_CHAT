@@ -605,6 +605,68 @@ document.addEventListener('DOMContentLoaded', function() {
 void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) {
     std::cout << "Solicitud recibida para index.html" << std::endl;
     
+    // Verificar si el cliente está conectado
+    if (!client_->isConnected()) {
+        std::string errorHtml = "<!DOCTYPE html>\n"
+            "<html>\n"
+            "<head>\n"
+            "    <title>Error de Conexion</title>\n"
+            "    <style>\n"
+            "        body {\n"
+            "            font-family: Arial, sans-serif;\n"
+            "            margin: 0;\n"
+            "            padding: 20px;\n"
+            "            background-color: #f0f0f0;\n"
+            "            display: flex;\n"
+            "            justify-content: center;\n"
+            "            align-items: center;\n"
+            "            min-height: 100vh;\n"
+            "        }\n"
+            "        .error-container {\n"
+            "            background-color: white;\n"
+            "            padding: 2rem;\n"
+            "            border-radius: 8px;\n"
+            "            box-shadow: 0 2px 4px rgba(0,0,0,0.1);\n"
+            "            text-align: center;\n"
+            "            max-width: 500px;\n"
+            "            width: 100%;\n"
+            "        }\n"
+            "        h1 {\n"
+            "            color: #e74c3c;\n"
+            "            margin-bottom: 1rem;\n"
+            "        }\n"
+            "        p {\n"
+            "            color: #666;\n"
+            "            line-height: 1.6;\n"
+            "            margin-bottom: 1rem;\n"
+            "        }\n"
+            "        .button {\n"
+            "            display: inline-block;\n"
+            "            padding: 0.8rem 1.5rem;\n"
+            "            background-color: #2c3e50;\n"
+            "            color: white;\n"
+            "            text-decoration: none;\n"
+            "            border-radius: 4px;\n"
+            "            margin-top: 1rem;\n"
+            "        }\n"
+            "        .button:hover {\n"
+            "            background-color: #3c5aa6;\n"
+            "        }\n"
+            "    </style>\n"
+            "</head>\n"
+            "<body>\n"
+            "    <div class=\"error-container\">\n"
+            "        <h1>Error de Conexion</h1>\n"
+            "        <p>No se pudo establecer la conexion con el servidor. El nombre de usuario ya esta en uso.</p>\n"
+            "        <p>Por favor, intente conectarse con un nombre de usuario diferente.</p>\n"
+            "        <a href=\"javascript:window.close()\" class=\"button\">Cerrar</a>\n"
+            "    </div>\n"
+            "</body>\n"
+            "</html>";
+        res.set_content(errorHtml, "text/html");
+        return;
+    }
+    
     // Obtener el nombre de usuario real del cliente
     std::string realUsername = client_->getUsername();
     
@@ -958,8 +1020,8 @@ void WebUI::handlePostMessage(const httplib::Request& req, httplib::Response& re
     std::string content = body["content"];
     
     // Enviar mensaje usando el cliente
-    client_->sendMessage(recipient, content);
-    
+        client_->sendMessage(recipient, content);
+        
     // Responder con éxito y el tipo de mensaje
     json response = {
         {"status", "ok"},
@@ -1017,8 +1079,8 @@ void WebUI::handlePostStatus(const httplib::Request& req, httplib::Response& res
     std::string status = body["status"];
     
     // Actualizar el estado del cliente
-    client_->setStatus(status);
-    
+        client_->setStatus(status);
+        
     // Responder con éxito
     json response = {
         {"status", "ok"},
@@ -1036,4 +1098,4 @@ void WebUI::handleWebSocket(const httplib::Request& req, httplib::Response& res)
     };
     
     res.set_content(response.dump(), "application/json");
-}
+} 

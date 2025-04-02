@@ -21,7 +21,13 @@ int main(int argc, char* argv[]) {
         webPort = std::stoi(argv[4]);
     }
 
-    auto client = std::make_shared<Client>(host, port, username);
+    std::shared_ptr<Client> client;
+    try {
+        client = std::make_shared<Client>(host, port, username);
+    } catch (const std::runtime_error& e) {
+        std::cerr << "Error al conectar: " << e.what() << std::endl;
+        return 1;
+    }
     
     if (!client->isConnected()) {
         std::cerr << "No se pudo conectar al servidor" << std::endl;
@@ -30,7 +36,11 @@ int main(int argc, char* argv[]) {
 
     // Iniciar el cliente en un hilo separado
     std::thread clientThread([client]() {
-        client->run();
+        try {
+            client->run();
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Error durante la ejecución: " << e.what() << std::endl;
+        }
     });
 
     // Iniciar la interfaz web en otro hilo

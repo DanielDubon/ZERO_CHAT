@@ -55,6 +55,7 @@ private:
     std::string status_;  // Estado del usuario
     std::string host_;    // Añadir estos
     int port_;           // miembros
+    bool connected_;     // Variable para el estado de conexión
     
     std::vector<Message> messages_;  // Almacén de mensajes
     std::mutex messagesMutex_;       // Mutex para proteger el acceso a los mensajes

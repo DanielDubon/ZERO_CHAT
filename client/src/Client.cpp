@@ -8,11 +8,11 @@
 #include <mutex>
 
 // Constructor por defecto
-Client::Client() : ws_(), username_(""), status_("ACTIVO") {}
+Client::Client() : ws_(), username_(""), status_("ACTIVO"), connected_(false) {}
 
 // Constructor
 Client::Client(const std::string& host, int port, const std::string& username)
-    : ws_(), username_(username), status_("ACTIVO"), host_(host), port_(port) {
+    : ws_(), username_(username), status_("ACTIVO"), host_(host), port_(port), connected_(false) {
     
     // Configurar los handlers antes de conectar
     ws_.onMessage([this](const std::string& msg) {
@@ -21,6 +21,7 @@ Client::Client(const std::string& host, int port, const std::string& username)
 
     ws_.onConnect([this]() {
         std::cout << "Conectado al servidor como " << username_ << std::endl;
+        connected_ = true;  // Actualizar el estado de conexión
         // Enviar mensaje de registro
         std::vector<std::string> regFields = {username_};
         auto regMsg = Protocol::serializeMessage(1, regFields);
@@ -29,8 +30,9 @@ Client::Client(const std::string& host, int port, const std::string& username)
         requestHistoryPublic();
     });
 
-    ws_.onDisconnect([]() {
+    ws_.onDisconnect([this]() {
         std::cout << "Desconectado del servidor" << std::endl;
+        connected_ = false;
     });
 
     ws_.onError([](const std::string& error) {
@@ -46,6 +48,10 @@ Client::Client(const std::string& host, int port, const std::string& username)
             std::cout << "Reintentando conexión..." << std::endl;
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));  // 1 segundo
         }
+    }
+
+    if (!connected) {
+        throw std::runtime_error("No se pudo conectar al servidor");
     }
 }
 
@@ -127,7 +133,7 @@ void Client::listConnectedUsers() {
 
 // Verificar si está conectado
 bool Client::isConnected() const {
-    return ws_.isConnected();
+    return connected_;
 }
 
 // Ejecutar el cliente
@@ -149,8 +155,16 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
     switch (code) {
         case 50: { // SERVER_ERROR
             if (!fields.empty()) {
-                std::cout << "\nError del servidor: " 
-                          << Protocol::bytesToString(fields[0]) << std::endl;
+                std::string errorMsg = Protocol::bytesToString(fields[0]);
+                std::cerr << "\nError del servidor: " << errorMsg << std::endl;
+                
+                // Si el error es de nombre duplicado, desconectar
+                if (errorMsg.find("nombre de usuario ya está en uso") != std::string::npos) {
+                    std::cerr << "El nombre de usuario ya está en uso. Desconectando..." << std::endl;
+                    ws_.close();
+                    connected_ = false;
+                    throw std::runtime_error("Nombre de usuario ya en uso");
+                }
             }
             break;
         }
