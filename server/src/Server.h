@@ -8,6 +8,7 @@
 #include <vector>
 #include "User.h"
 #include <libwebsockets.h>
+#include "Message.h"
 
 // Forward declaration
 struct SessionData;
@@ -33,6 +34,8 @@ private:
     int port_;
     bool running_;
     struct lws_context *context_;
+    std::vector<Message> history_;
+    std::mutex historyMutex_;
 
     // Mapa para almacenar los usuarios registrados (clave: username)
     std::unordered_map<std::string, std::shared_ptr<User>> users_;

@@ -196,14 +196,41 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
         // Se esperan 2 campos: [username, newStatus]
             if (fields.size() < 2) return;
                 std::string username = Protocol::bytesToString(fields[0]);
-                std::string newStatus = Protocol::bytesToString(fields[1]);
+                std::string newStatusStr = Protocol::bytesToString(fields[1]);
 
+                int statusNum;
+
+                try
+                {
+                    statusNum = std::stoi(newStatusStr);
+                }
+                catch(const std::exception& e)
+                {
+                   std::vector<uint8_t> errorMsg = {50, 2};
+                   sendMessage(wsi, errorMsg);
+                   break;
+                }
+
+                if (statusNum < 0 || statusNum > 3) {
+                    std::vector<uint8_t> errorMsg = { 50, 2 }; // Error 2: estatus inválido
+                    sendMessage(wsi, errorMsg);
+                    break;
+                }
+
+                std::string statusText;
+                switch (statusNum) {
+                case 0: statusText = "DISCONNECTED"; break;
+                case 1: statusText = "ACTIVO"; break;
+                case 2: statusText = "OCUPADO"; break;
+                case 3: statusText = "INACTIVO"; break;
+                 }
+                
                 auto it = users_.find(username);
             if (it != users_.end()) {
-                it->second->setStatus(newStatus);
-                std::cout << "[LOG] El usuario " << username << " ahora es: " << newStatus << std::endl;
+                it->second->setStatus(statusText);
+                std::cout << "[LOG] El usuario " << username << " ahora es: " << statusText << std::endl;
                 // Notificar a todos (código 54: Usuario cambió estatus)
-                std::vector<std::string> responseFields = { username, newStatus };
+                std::vector<std::string> responseFields = { username, statusText };
                 auto response = Protocol::serializeMessage(54, responseFields);
                 for (auto &conn : connections_) {
                 sendMessage(conn.second, response);
@@ -244,20 +271,57 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
                     std::vector<uint8_t> errorMsg = { 50, 4 };
                     sendMessage(wsi, errorMsg);
                 }
+                std::lock_guard<std::mutex> lock(historyMutex_);
+                Message histMsg(session->username, dest, content);
+                history_.push_back(histMsg);
             }
             break;
         }
 
-                case 5: { // Obtener Mensajes (historial)
-                    // Se espera 1 campo: [chat]
-                    if (fields.size() < 1) return;
-                    std::string chatPartner = Protocol::bytesToString(fields[0]);
-                    // Aquí se debe implementar la lógica para obtener y enviar el historial de mensajes.
-                    // Por ahora, se envía un stub o mensaje de error.
-                    std::vector<uint8_t> errorMsg = { 50, 0 }; // Error 0 puede significar "no implementado"
-                    sendMessage(wsi, errorMsg);
-                    break;
+        case 5: { // Obtener Mensajes (historial)
+            // Se espera 1 campo: [chat]
+            if (fields.size() < 1) return;
+            std::string chatPartner = Protocol::bytesToString(fields[0]);
+            
+            std::vector<Message> filtered;
+            {
+                std::lock_guard<std::mutex> lock(historyMutex_);
+                if (chatPartner == "~") {
+                    // Para chat general: filtrar mensajes broadcast (donde el receptor es "~")
+                    for (const auto &msg : history_) {
+                        if (msg.getReceiver() == "~") {
+                            filtered.push_back(msg);
+                        }
+                    }
+                } else {
+                    // Para chat privado: filtrar mensajes entre el solicitante (session->username)
+                    // y el chatPartner
+                    for (const auto &msg : history_) {
+                        if ((msg.getSender() == chatPartner && msg.getReceiver() == session->username) ||
+                            (msg.getSender() == session->username && msg.getReceiver() == chatPartner)) {
+                            filtered.push_back(msg);
+                        }
+                    }
                 }
+            }
+            // Limitar a 255 mensajes, ya que el campo del número es 1 byte.
+            if (filtered.size() > 255) {
+                filtered.resize(255);
+            }
+            
+            // Construir la respuesta para el historial (código 56)
+            // Primer campo: número de mensajes (convertido a 1 byte)
+            // Luego, para cada mensaje: [remitente, contenido]
+            std::vector<std::string> responseFields;
+            responseFields.push_back(std::string(1, static_cast<char>(filtered.size())));
+            for (const auto &msg : filtered) {
+                responseFields.push_back(msg.getSender());
+                responseFields.push_back(msg.getContent());
+            }
+            auto response = Protocol::serializeMessage(56, responseFields);
+            sendMessage(wsi, response);
+            break;
+        }
 
                 default:
                 std::cerr << "[ERROR] Código de mensaje no reconocido: " << static_cast<int>(code) << std::endl;
@@ -295,6 +359,7 @@ void Server::sendUserList(struct lws *wsi) {
     std::lock_guard<std::mutex> lock(usersMutex_);
     std::vector<std::string> userList;
 
+    userList.push_back(std::string(1, static_cast<char>(users_.size())));
     for (const auto& kv : users_) {
         userList.push_back(kv.first);                   
         userList.push_back(kv.second->getStatus());     
