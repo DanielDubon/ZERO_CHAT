@@ -107,6 +107,7 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
         
                 std::cout << "[LOG] Usuario " << session->username << " conectado." << std::endl;
             }
+            
             break;
         }
 
