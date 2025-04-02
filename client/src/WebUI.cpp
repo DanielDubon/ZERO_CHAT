@@ -330,8 +330,11 @@ function loadMessages() {
         .then(data => {
             console.log('Cargando mensajes, cantidad recibida:', data.messages.length);
             
-            // Solo limpiar los mensajes si hay nuevos mensajes
             if (data.messages.length > 0) {
+                // Guardar la posición actual del scroll
+                const scrollHeightBefore = chatMessages.scrollHeight;
+                const currentScrollTop = chatMessages.scrollTop;
+                
                 // Limpiar todos los mensajes existentes
                 chatMessages.innerHTML = '';
                 messageIds.clear();
@@ -343,7 +346,6 @@ function loadMessages() {
                         messageIds.add(messageId);
                         const isOutgoing = message.sender === username;
                         
-                        // Determinar el tipo de mensaje
                         if (message.receiver === "~") {
                             message.type = 'broadcast';
                         } else {
@@ -354,8 +356,11 @@ function loadMessages() {
                     }
                 });
                 
-                // Scroll hacia abajo
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                // Verificar si estamos cerca del final antes de hacer scroll
+                const nearBottom = (scrollHeightBefore - currentScrollTop - chatMessages.clientHeight) < 50;
+                if (nearBottom) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
             }
         })
         .catch(error => console.error('Error cargando mensajes:', error));
@@ -821,8 +826,11 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 .then(data => {
                     console.log('Cargando mensajes, cantidad recibida:', data.messages.length);
                     
-                    // Solo limpiar los mensajes si hay nuevos mensajes
                     if (data.messages.length > 0) {
+                        // Guardar la posición actual del scroll
+                        const scrollHeightBefore = chatMessages.scrollHeight;
+                        const currentScrollTop = chatMessages.scrollTop;
+                        
                         // Limpiar todos los mensajes existentes
                         chatMessages.innerHTML = '';
                         messageIds.clear();
@@ -834,7 +842,6 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                                 messageIds.add(messageId);
                                 const isOutgoing = message.sender === username;
                                 
-                                // Determinar el tipo de mensaje
                                 if (message.receiver === "~") {
                                     message.type = 'broadcast';
                                 } else {
@@ -845,8 +852,11 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                             }
                         });
                         
-                        // Scroll hacia abajo
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                        // Verificar si estamos cerca del final antes de hacer scroll
+                        const nearBottom = (scrollHeightBefore - currentScrollTop - chatMessages.clientHeight) < 50;
+                        if (nearBottom) {
+                            chatMessages.scrollTop = chatMessages.scrollHeight;
+                        }
                     } else {
                         console.log('No hay nuevos mensajes para mostrar');
                     }
