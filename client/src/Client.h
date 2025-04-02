@@ -19,6 +19,7 @@ public:
     void sendMessage(const std::string& recipient, const std::string& message);
     void setStatus(const std::string& status);  // Establecer el estado del usuario
     void listConnectedUsers();  // Listar usuarios conectados
+    void requestHistoryPublic(); // Declaración
     bool isConnected() const;  // Verificar si está conectado
     void run();  // Añadir esta declaración
 

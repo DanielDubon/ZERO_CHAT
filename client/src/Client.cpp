@@ -25,6 +25,8 @@ Client::Client(const std::string& host, int port, const std::string& username)
         std::vector<std::string> regFields = {username_};
         auto regMsg = Protocol::serializeMessage(1, regFields);
         ws_.send(Protocol::bytesToString(regMsg));
+        // Recibir mensajes anteriores
+        requestHistoryPublic();
     });
 
     ws_.onDisconnect([]() {
@@ -75,6 +77,15 @@ void Client::sendMessage(const std::string& recipient, const std::string& messag
     // Serializar y enviar el mensaje
     std::string serialized = Protocol::bytesToString(Protocol::serializeMessage(messageType, fields));
     ws_.send(serialized);
+}
+
+void Client::requestHistoryPublic() {
+    // code=5, fields=[ "~" ]  (destinatario ~ => chat general)
+    std::vector<std::string> fields = { "~" };
+    auto msg = Protocol::serializeMessage(5, fields);
+    ws_.send(Protocol::bytesToString(msg)); 
+    // Enviamos al servidor: ID=5, un solo campo "~"
+    std::cout << "Solicitud de historial de mensajes broadcast enviada.\n";
 }
 
 // Establecer el estado del usuario
@@ -251,16 +262,22 @@ void Client::handleIncomingMessage(const std::string& rawMsg) {
         case 56: { // Respuesta a: Obtener historial de mensajes
             if (!fields.empty()) {
                 // Se espera que el primer campo sea el número de mensajes (en formato numérico)
-                int numMensajes = std::stoi(Protocol::bytesToString(fields[0]));
+                unsigned char rawCount = static_cast<unsigned char>(fields[0][0]);
+                int numMensajes = static_cast<int>(rawCount);
                 std::cout << "\nHistorial de mensajes (" << numMensajes << " mensajes):\n";
                 for (size_t i = 1; i + 1 < fields.size(); i += 2) {
                     std::string uname = Protocol::bytesToString(fields[i]);
                     std::string contenido = Protocol::bytesToString(fields[i + 1]);
                     std::cout << "[" << uname << "]: " << contenido << std::endl;
+
+                    // Guardar en historial local
+                    Message msg(uname, "~", contenido);
+                    addMessage(msg);
                 }
+                displayPrompt();
             }
             break;
-        }
+        }        
         default:
             std::cout << "\nMensaje desconocido recibido (código " << (int)code << ")\n";
             break;

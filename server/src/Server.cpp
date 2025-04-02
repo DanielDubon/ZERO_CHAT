@@ -289,6 +289,10 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
                 for (auto &conn : connections_) {
                     sendMessage(conn.second, response);
                 }
+                // Agregar al historial
+                std::lock_guard<std::mutex> lock(historyMutex_);
+                Message broadcastMsg(session->username, "~", content);
+                history_.push_back(broadcastMsg);
             } else { // Mensaje privado
                 auto it = connections_.find(dest);
                 if (it != connections_.end()) {
@@ -328,7 +332,7 @@ void Server::handleClientData(struct lws *wsi, SessionData *session,
                 } else {
                     // Para chat privado: filtrar mensajes entre el solicitante (session->username)
                     // y el chatPartner
-                    for (const auto &msg : history_) {
+                    for (auto &msg : history_) {
                         if ((msg.getSender() == chatPartner && msg.getReceiver() == session->username) ||
                             (msg.getSender() == session->username && msg.getReceiver() == chatPartner)) {
                             filtered.push_back(msg);
