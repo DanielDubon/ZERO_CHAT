@@ -128,6 +128,18 @@ int Server::wsCallback(struct lws *wsi, enum lws_callback_reasons reason,
                 server->connections_[session->username] = wsi;
         
                 std::cout << "[LOG] Usuario " << session->username << " conectado." << std::endl;
+
+                // Enviar notificación de nuevo usuario a todos (mensaje código 53)
+                std::vector<std::string> notifyFields = { session->username, "ACTIVO" };
+                auto notification = Protocol::serializeMessage(53, notifyFields);
+                for (auto &conn : server->connections_) {
+                    server->sendMessage(conn.second, notification);
+                }
+            
+                // Enviar la lista actualizada de usuarios a todos (mensaje código 51)
+                for (auto &conn : server->connections_) {
+                    server->sendUserList(conn.second);
+                }
             }
             
             break;
