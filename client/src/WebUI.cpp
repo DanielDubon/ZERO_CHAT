@@ -567,9 +567,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         chatMessages.appendChild(div);
         
-        // Scroll al fondo solo si estamos cerca del final
-        const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
-        if (isNearBottom) {
+        // Solo hacer scroll si estamos muy cerca del final (20 píxeles o menos)
+        const isVeryNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight <= 20;
+        if (isVeryNearBottom || outgoing) {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
     }
@@ -976,9 +976,9 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
             
             chatMessages.appendChild(div);
             
-            // Scroll al fondo solo si estamos cerca del final
-            const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
-            if (isNearBottom) {
+            // Solo hacer scroll si estamos muy cerca del final (20 píxeles o menos)
+            const isVeryNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight <= 20;
+            if (isVeryNearBottom || outgoing) {
                 chatMessages.scrollTop = chatMessages.scrollHeight;
             }
         }
