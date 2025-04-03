@@ -389,58 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(checkUpdates, 100);
     
     // Event listeners
-    chatForm.addEventListener('submit', e => {
-        e.preventDefault();
-        
-        // Obtener mensaje y destinatario
-        const msg = msgInput.value.trim();
-        const recipient = recipientSelector.value;
-        
-        if (msg) {
-            console.log('Enviando mensaje a:', recipient, 'Contenido:', msg);
-            
-            // Enviar mensaje al servidor
-            fetch('/api/message', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    recipient: recipient,
-                    content: msg
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'ok') {
-                    console.log('Mensaje enviado con éxito, tipo:', data.type);
-                    
-                    // Crear objeto de mensaje para mostrar inmediatamente
-                    const messageObj = {
-                        sender: username,
-                        content: msg,
-                        timestamp: getCurrentTime(),
-                        type: recipient === 'all' ? 'broadcast' : 'private'
-                    };
-                    
-                    console.log('Objeto de mensaje creado:', messageObj);
-                    
-                    // Mostrar mensaje en la interfaz
-                    outputMessage(messageObj, true);
-                    
-                    // Añadir el ID del mensaje al conjunto para evitar duplicados
-                    const messageId = messageObj.timestamp + '-' + messageObj.sender + '-' + messageObj.content;
-                    messageIds.add(messageId);
-                    
-                    // Limpiar input y hacer scroll
-                    msgInput.value = '';
-                    msgInput.focus();
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }
-            })
-            .catch(error => console.error('Error enviando mensaje:', error));
-        }
-    });
+    chatForm.addEventListener('submit', sendMessage);
     
     statusSelector.addEventListener('change', changeStatus);
     
@@ -467,7 +416,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Limpiar la lista de usuarios
                 usersList.innerHTML = '';
                 
-                // Actualizar el selector de destinatarios
+                // Guardar el destinatario seleccionado actualmente
+                const currentRecipient = recipientSelector.value;
+                
+                // Actualizar el selector de destinatarios preservando la selección
                 recipientSelector.innerHTML = '<option value="all">Todos</option>';
                 
                 // Añadir cada usuario a la lista y al selector
@@ -490,9 +442,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         const option = document.createElement('option');
                         option.value = user.username;
                         option.textContent = user.username;
+                        // Restaurar la selección previa si el usuario aún está disponible
+                        if (user.username === currentRecipient) {
+                            option.selected = true;
+                        }
                         recipientSelector.appendChild(option);
                     }
                 });
+                
+                // Si el destinatario anterior ya no está disponible, seleccionar "Todos"
+                if (!Array.from(recipientSelector.options).some(opt => opt.value === currentRecipient)) {
+                    recipientSelector.value = 'all';
+                }
             })
             .catch(error => console.error('Error cargando usuarios:', error));
     }
@@ -531,9 +492,58 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => console.error('Error en polling:', error));
     }
     
-    function outputMessage(message, outgoing = false) {
-        console.log('Mostrando mensaje:', message, 'Outgoing:', outgoing);
+    function sendMessage(e) {
+        e.preventDefault();
         
+        const msg = msgInput.value.trim();
+        const recipient = recipientSelector.value;
+        
+        if (msg) {
+            console.log('Enviando mensaje a:', recipient, 'Contenido:', msg);
+            
+            fetch('/api/message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    recipient: recipient,
+                    content: msg
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    console.log('Mensaje enviado con éxito, tipo:', data.type);
+                    
+                    // Crear objeto de mensaje para mostrar inmediatamente
+                    const messageObj = {
+                        sender: username,
+                        receiver: recipient,
+                        content: msg,
+                        timestamp: getCurrentTime(),
+                        type: recipient === 'all' ? 'broadcast' : 'private'
+                    };
+                    
+                    // Mostrar mensaje en la interfaz
+                    outputMessage(messageObj, true);
+                    
+                    // Limpiar input y mantener foco
+                    msgInput.value = '';
+                    msgInput.focus();
+                } else {
+                    console.error('Error al enviar mensaje:', data.message);
+                    alert('Error al enviar mensaje: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error enviando mensaje:', error);
+                alert('Error al enviar mensaje: ' + error.message);
+            });
+        }
+    }
+    
+    function outputMessage(message, outgoing = false) {
         const div = document.createElement('div');
         div.classList.add('message');
         div.classList.add(message.type);
@@ -542,11 +552,9 @@ document.addEventListener('DOMContentLoaded', function() {
             div.classList.add('outgoing');
         }
         
-        console.log('Clases añadidas:', div.className);
-        
         let senderText = message.sender;
         if (message.type === 'private') {
-            senderText += ' → ' + message.receiver;
+            senderText += ' → ' + (message.receiver === username ? 'ti' : message.receiver);
         }
         
         div.innerHTML = `
@@ -558,6 +566,12 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         chatMessages.appendChild(div);
+        
+        // Scroll al fondo solo si estamos cerca del final
+        const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
+        if (isNearBottom) {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
     }
     
     function getCurrentTime() {
@@ -740,58 +754,7 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
         setInterval(checkUpdates, 100);
         
         // Event listeners
-        chatForm.addEventListener('submit', e => {
-            e.preventDefault();
-            
-            // Obtener mensaje y destinatario
-            const msg = msgInput.value.trim();
-            const recipient = recipientSelector.value;
-            
-            if (msg) {
-                console.log('Enviando mensaje a:', recipient, 'Contenido:', msg);
-                
-                // Enviar mensaje al servidor
-                fetch('/api/message', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        recipient: recipient,
-                        content: msg
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'ok') {
-                        console.log('Mensaje enviado con éxito, tipo:', data.type);
-                        
-                        // Crear objeto de mensaje para mostrar inmediatamente
-                        const messageObj = {
-                            sender: username,
-                            content: msg,
-                            timestamp: getCurrentTime(),
-                            type: recipient === 'all' ? 'broadcast' : 'private'
-                        };
-                        
-                        console.log('Objeto de mensaje creado:', messageObj);
-                        
-                        // Mostrar mensaje en la interfaz
-                        outputMessage(messageObj, true);
-                        
-                        // Añadir el ID del mensaje al conjunto para evitar duplicados
-                        const messageId = messageObj.timestamp + '-' + messageObj.sender + '-' + messageObj.content;
-                        messageIds.add(messageId);
-                        
-                        // Limpiar input y hacer scroll
-                        msgInput.value = '';
-                        msgInput.focus();
-                        chatMessages.scrollTop = chatMessages.scrollHeight;
-                    }
-                })
-                .catch(error => console.error('Error enviando mensaje:', error));
-            }
-        });
+        chatForm.addEventListener('submit', sendMessage);
         
         // Evento change para el selector de destinatarios
         recipientSelector.addEventListener('change', function(e) {
@@ -818,7 +781,10 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                     // Limpiar la lista de usuarios
                     usersList.innerHTML = '';
                     
-                    // Actualizar el selector de destinatarios
+                    // Guardar el destinatario seleccionado actualmente
+                    const currentRecipient = recipientSelector.value;
+                    
+                    // Actualizar el selector de destinatarios preservando la selección
                     recipientSelector.innerHTML = '<option value="all">Todos</option>';
                     
                     // Añadir cada usuario a la lista y al selector
@@ -841,9 +807,18 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                             const option = document.createElement('option');
                             option.value = user.username;
                             option.textContent = user.username;
+                            // Restaurar la selección previa si el usuario aún está disponible
+                            if (user.username === currentRecipient) {
+                                option.selected = true;
+                            }
                             recipientSelector.appendChild(option);
                         }
                     });
+                    
+                    // Si el destinatario anterior ya no está disponible, seleccionar "Todos"
+                    if (!Array.from(recipientSelector.options).some(opt => opt.value === currentRecipient)) {
+                        recipientSelector.value = 'all';
+                    }
                 })
                 .catch(error => console.error('Error cargando usuarios:', error));
         }
@@ -926,9 +901,58 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 .catch(error => console.error('Error cargando mensajes:', error));
         }
         
-        function outputMessage(message, outgoing = false) {
-            console.log('Mostrando mensaje:', message, 'Outgoing:', outgoing);
+        function sendMessage(e) {
+            e.preventDefault();
             
+            const msg = msgInput.value.trim();
+            const recipient = recipientSelector.value;
+            
+            if (msg) {
+                console.log('Enviando mensaje a:', recipient, 'Contenido:', msg);
+                
+                fetch('/api/message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        recipient: recipient,
+                        content: msg
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        console.log('Mensaje enviado con éxito, tipo:', data.type);
+                        
+                        // Crear objeto de mensaje para mostrar inmediatamente
+                        const messageObj = {
+                            sender: username,
+                            receiver: recipient,
+                            content: msg,
+                            timestamp: getCurrentTime(),
+                            type: recipient === 'all' ? 'broadcast' : 'private'
+                        };
+                        
+                        // Mostrar mensaje en la interfaz
+                        outputMessage(messageObj, true);
+                        
+                        // Limpiar input y mantener foco
+                        msgInput.value = '';
+                        msgInput.focus();
+                    } else {
+                        console.error('Error al enviar mensaje:', data.message);
+                        alert('Error al enviar mensaje: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error enviando mensaje:', error);
+                    alert('Error al enviar mensaje: ' + error.message);
+                });
+            }
+        }
+        
+        function outputMessage(message, outgoing = false) {
             const div = document.createElement('div');
             div.classList.add('message');
             div.classList.add(message.type);
@@ -937,11 +961,9 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
                 div.classList.add('outgoing');
             }
             
-            console.log('Clases añadidas:', div.className);
-            
             let senderText = message.sender;
             if (message.type === 'private') {
-                senderText += ' → ' + message.receiver;
+                senderText += ' → ' + (message.receiver === username ? 'ti' : message.receiver);
             }
             
             div.innerHTML = `
@@ -953,6 +975,12 @@ void WebUI::handleGetIndex(const httplib::Request& req, httplib::Response& res) 
             `;
             
             chatMessages.appendChild(div);
+            
+            // Scroll al fondo solo si estamos cerca del final
+            const isNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 100;
+            if (isNearBottom) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
         }
         
         function getCurrentTime() {
@@ -1012,24 +1040,38 @@ void WebUI::handleGetMessages(const httplib::Request& req, httplib::Response& re
 }
 
 void WebUI::handlePostMessage(const httplib::Request& req, httplib::Response& res) {
-    // Parsear el cuerpo de la solicitud
-    json body = json::parse(req.body);
-    
-    // Obtener destinatario y contenido
-    std::string recipient = body["recipient"];
-    std::string content = body["content"];
-    
-    // Enviar mensaje usando el cliente
+    try {
+        // Parsear el cuerpo de la solicitud
+        json body = json::parse(req.body);
+        
+        // Obtener destinatario y contenido
+        std::string recipient = body["recipient"];
+        std::string content = body["content"];
+        
+        // Convertir "all" a "~" para broadcast
+        if (recipient == "all") {
+            recipient = "~";
+        }
+        
+        // Enviar mensaje usando el cliente
         client_->sendMessage(recipient, content);
         
-    // Responder con éxito y el tipo de mensaje
-    json response = {
-        {"status", "ok"},
-        {"message", "Mensaje enviado correctamente"},
-        {"type", recipient == "all" ? "broadcast" : "private"}
-    };
-    
-    res.set_content(response.dump(), "application/json");
+        // Responder con éxito y el tipo de mensaje
+        json response = {
+            {"status", "ok"},
+            {"message", "Mensaje enviado correctamente"},
+            {"type", (recipient == "~") ? "broadcast" : "private"}
+        };
+        
+        res.set_content(response.dump(), "application/json");
+    } catch (const std::exception& e) {
+        // En caso de error, enviar respuesta de error
+        json response = {
+            {"status", "error"},
+            {"message", std::string("Error al enviar mensaje: ") + e.what()}
+        };
+        res.set_content(response.dump(), "application/json");
+    }
 }
 
 void WebUI::handleGetUsers(const httplib::Request& req, httplib::Response& res) {
